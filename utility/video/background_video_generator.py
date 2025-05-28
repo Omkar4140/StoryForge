@@ -4,8 +4,8 @@ from utility.utils import log_response, LOG_TYPE_PEXEL
 
 PEXELS_API_KEY = os.environ.get('PEXELS_KEY')
 
-def search_videos(query_string, orientation_landscape=True):
-    """Search for videos using Pexels API"""
+def search_videos(query_string, orientation_portrait=True):
+    """Search for videos using Pexels API - Default to portrait orientation"""
     if not PEXELS_API_KEY:
         print("Error: PEXELS_KEY not found in environment variables")
         return {"videos": []}
@@ -17,8 +17,8 @@ def search_videos(query_string, orientation_landscape=True):
     }
     params = {
         "query": query_string,
-        "orientation": "landscape" if orientation_landscape else "portrait",
-        "per_page": 15
+        "orientation": "portrait" if orientation_portrait else "landscape",
+        "per_page": 20  # Increased to find more portrait videos
     }
     
     try:
@@ -34,14 +34,14 @@ def search_videos(query_string, orientation_landscape=True):
         print(f"Unexpected error searching videos: {e}")
         return {"videos": []}
 
-def getBestVideo(query_string, orientation_landscape=True, used_vids=[]):
-    """Get the best video for a query string"""
-    print(f"Searching for video: {query_string}")
+def getBestVideo(query_string, orientation_portrait=True, used_vids=[]):
+    """Get the best video for a query string - Default to portrait orientation"""
+    print(f"🔍 Searching for {'portrait' if orientation_portrait else 'landscape'} video: {query_string}")
     
-    vids = search_videos(query_string, orientation_landscape)
+    vids = search_videos(query_string, orientation_portrait)
     
     if 'videos' not in vids or not vids['videos']:
-        print(f"No videos found for query: {query_string}")
+        print(f"❌ No videos found for query: {query_string}")
         return None
         
     videos = vids['videos']
@@ -51,29 +51,60 @@ def getBestVideo(query_string, orientation_landscape=True, used_vids=[]):
     
     for video in videos:
         try:
-            if orientation_landscape:
-                # For landscape: width >= 1920, height >= 1080, aspect ratio close to 16:9
-                if (video.get('width', 0) >= 1920 and 
-                    video.get('height', 0) >= 1080 and 
-                    abs((video['width'] / video['height']) - (16/9)) < 0.1):
-                    filtered_videos.append(video)
+            if orientation_portrait:
+                # For portrait (9:16): height should be significantly greater than width
+                # Target: 1080x1920 or similar ratios
+                width = video.get('width', 0)
+                height = video.get('height', 0)
+                
+                if width > 0 and height > 0:
+                    aspect_ratio = height / width
+                    # Accept aspect ratios between 1.5 and 2.0 (covers 9:16 = 1.78)
+                    if (height >= 1080 and width >= 720 and 
+                        1.5 <= aspect_ratio <= 2.0):
+                        filtered_videos.append(video)
+                        print(f"✅ Found suitable portrait video: {width}x{height} (ratio: {aspect_ratio:.2f})")
             else:
-                # For portrait: width >= 1080, height >= 1920, aspect ratio close to 9:16
-                if (video.get('width', 0) >= 1080 and 
-                    video.get('height', 0) >= 1920 and 
-                    abs((video['height'] / video['width']) - (16/9)) < 0.1):
-                    filtered_videos.append(video)
+                # For landscape: width >= height, aspect ratio close to 16:9
+                width = video.get('width', 0)
+                height = video.get('height', 0)
+                
+                if width > 0 and height > 0:
+                    aspect_ratio = width / height
+                    if (width >= 1920 and height >= 1080 and 
+                        1.5 <= aspect_ratio <= 2.0):
+                        filtered_videos.append(video)
+                        
         except (KeyError, ZeroDivisionError, TypeError) as e:
-            print(f"Error filtering video: {e}")
+            print(f"⚠️ Error filtering video: {e}")
             continue
     
     if not filtered_videos:
-        print(f"No filtered videos found for query: {query_string}")
-        return None
+        print(f"❌ No suitable {'portrait' if orientation_portrait else 'landscape'} videos found for: {query_string}")
+        
+        # Fallback: try any video with reasonable quality
+        print(f"🔄 Trying fallback search for any quality video...")
+        fallback_videos = []
+        for video in videos:
+            try:
+                width = video.get('width', 0)
+                height = video.get('height', 0)
+                if orientation_portrait and height > width and height >= 720:
+                    fallback_videos.append(video)
+                elif not orientation_portrait and width > height and width >= 1280:
+                    fallback_videos.append(video)
+            except:
+                continue
+        
+        if fallback_videos:
+            filtered_videos = fallback_videos
+            print(f"✅ Found {len(fallback_videos)} fallback videos")
+        else:
+            return None
     
-    # Sort by duration (prefer videos around 15 seconds)
+    # Sort by duration (prefer videos around 10-15 seconds for short content)
     try:
-        sorted_videos = sorted(filtered_videos, key=lambda x: abs(15 - int(x.get('duration', 15))))
+        sorted_videos = sorted(filtered_videos, key=lambda x: abs(12 - int(x.get('duration', 12))))
     except (TypeError, ValueError):
         sorted_videos = filtered_videos
     
@@ -82,36 +113,74 @@ def getBestVideo(query_string, orientation_landscape=True, used_vids=[]):
         if 'video_files' not in video:
             continue
             
-        for video_file in video['video_files']:
+        # Sort video files by quality (highest first)
+        video_files = video['video_files']
+        try:
+            if orientation_portrait:
+                # For portrait: prefer 1080x1920, then other high-quality portrait formats
+                video_files = sorted(video_files, 
+                                   key=lambda x: (
+                                       x.get('height', 0) * x.get('width', 0),  # Total pixels
+                                       abs(1920 - x.get('height', 0)),  # Closeness to 1920 height
+                                       abs(1080 - x.get('width', 0))    # Closeness to 1080 width
+                                   ), reverse=True)
+            else:
+                # For landscape: prefer 1920x1080
+                video_files = sorted(video_files, 
+                                   key=lambda x: (
+                                       x.get('height', 0) * x.get('width', 0),  # Total pixels
+                                       abs(1920 - x.get('width', 0)),   # Closeness to 1920 width
+                                       abs(1080 - x.get('height', 0))   # Closeness to 1080 height
+                                   ), reverse=True)
+        except:
+            pass
+            
+        for video_file in video_files:
             try:
-                if orientation_landscape:
-                    if (video_file.get('width') == 1920 and 
-                        video_file.get('height') == 1080 and 
-                        'link' in video_file):
-                        
-                        link_base = video_file['link'].split('.hd')[0]
-                        if link_base not in used_vids:
-                            print(f"✅ Found video for '{query_string}': {video_file['link']}")
-                            return video_file['link']
+                if 'link' not in video_file:
+                    continue
+                    
+                width = video_file.get('width', 0)
+                height = video_file.get('height', 0)
+                
+                if width <= 0 or height <= 0:
+                    continue
+                
+                link_base = video_file['link'].split('.hd')[0] if '.hd' in video_file['link'] else video_file['link']
+                
+                if link_base in used_vids:
+                    continue
+                
+                if orientation_portrait:
+                    # Accept any portrait video with decent quality
+                    if height > width and height >= 720:
+                        print(f"✅ Selected portrait video: {width}x{height} for '{query_string}'")
+                        print(f"📹 URL: {video_file['link']}")
+                        return video_file['link']
                 else:
-                    if (video_file.get('width') == 1080 and 
-                        video_file.get('height') == 1920 and 
-                        'link' in video_file):
+                    # Accept any landscape video with decent quality
+                    if width > height and width >= 1280:
+                        print(f"✅ Selected landscape video: {width}x{height} for '{query_string}'")
+                        print(f"📹 URL: {video_file['link']}")
+                        return video_file['link']
                         
-                        link_base = video_file['link'].split('.hd')[0]
-                        if link_base not in used_vids:
-                            print(f"✅ Found video for '{query_string}': {video_file['link']}")
-                            return video_file['link']
             except (KeyError, AttributeError) as e:
-                print(f"Error processing video file: {e}")
+                print(f"⚠️ Error processing video file: {e}")
                 continue
     
-    print(f"❌ NO LINKS found for query: {query_string}")
+    print(f"❌ No suitable video links found for: {query_string}")
     return None
 
-def generate_video_url(timed_video_searches, video_server):
-    """Generate video URLs for timed search queries with enhanced error handling"""
+def generate_video_url(timed_video_searches, video_server, orientation="portrait"):
+    """Generate video URLs for timed search queries with enhanced error handling
+    
+    Args:
+        timed_video_searches: List of timed search queries
+        video_server: Video service to use ("pexel" or "stable_diffusion")
+        orientation: "portrait" for 9:16 or "landscape" for 16:9
+    """
     print(f"=== GENERATE VIDEO URL DEBUG ===")
+    print(f"📱 Orientation: {orientation} ({'9:16 portrait' if orientation == 'portrait' else '16:9 landscape'})")
     print(f"Input timed_video_searches: {timed_video_searches}")
     print(f"Input type: {type(timed_video_searches)}")
     print(f"Video server: {video_server}")
@@ -133,9 +202,10 @@ def generate_video_url(timed_video_searches, video_server):
         print(f"❌ ERROR: Expected list, got {type(timed_video_searches)}")
         return []
     
-    print(f"Processing {len(timed_video_searches)} search queries")
+    print(f"Processing {len(timed_video_searches)} search queries for {orientation} videos")
     
     timed_video_urls = []
+    use_portrait = orientation == "portrait"
     
     if video_server == "pexel":
         used_links = []
@@ -188,7 +258,7 @@ def generate_video_url(timed_video_searches, video_server):
                     timed_video_urls.append([[t1, t2], None])
                     continue
                 
-                print(f"✅ Processing segment [{t1}, {t2}] with {len(search_terms)} terms")
+                print(f"✅ Processing segment [{t1}, {t2}] with {len(search_terms)} terms for {orientation}")
                 
                 url = None
                 # Try each search term until we find a video
@@ -203,21 +273,21 @@ def generate_video_url(timed_video_searches, video_server):
                         print(f"❌ Warning: Empty query after stripping at position {j}")
                         continue
                     
-                    print(f"  🔍 Trying query {j+1}/{len(search_terms)}: '{query}'")
-                    url = getBestVideo(query, orientation_landscape=True, used_vids=used_links)
+                    print(f"  🔍 Trying {orientation} query {j+1}/{len(search_terms)}: '{query}'")
+                    url = getBestVideo(query, orientation_portrait=use_portrait, used_vids=used_links)
                     
                     if url:
                         used_links.append(url.split('.hd')[0] if '.hd' in url else url)
-                        print(f"  ✅ Found video for segment [{t1}, {t2}]: {url}")
+                        print(f"  ✅ Found {orientation} video for segment [{t1}, {t2}]: {url}")
                         break
                     else:
-                        print(f"  ❌ No video found for '{query}'")
+                        print(f"  ❌ No {orientation} video found for '{query}'")
                 
                 # Add the result (url can be None)
                 timed_video_urls.append([[t1, t2], url])
                 
                 if url is None:
-                    print(f"⚠️  Warning: No video found for any search term in segment [{t1}, {t2}]")
+                    print(f"⚠️  Warning: No {orientation} video found for any search term in segment [{t1}, {t2}]")
                 
             except Exception as e:
                 print(f"❌ Error processing search data at index {i}: {e}")
@@ -257,13 +327,13 @@ def generate_video_url(timed_video_searches, video_server):
         return []
     
     print(f"\n=== SUMMARY ===")
-    print(f"Generated {len(timed_video_urls)} video URL entries")
+    print(f"Generated {len(timed_video_urls)} video URL entries for {orientation} format")
     
     # Debug output
     successful_urls = sum(1 for entry in timed_video_urls if len(entry) >= 2 and entry[1] is not None)
     failed_urls = len(timed_video_urls) - successful_urls
     
-    print(f"✅ Successful video matches: {successful_urls}")
+    print(f"✅ Successful {orientation} video matches: {successful_urls}")
     print(f"❌ Failed video matches: {failed_urls}")
     print(f"📊 Success rate: {successful_urls/len(timed_video_urls)*100:.1f}%" if timed_video_urls else "0%")
     
@@ -317,10 +387,10 @@ def validate_search_input(timed_video_searches):
     return True
 
 # Enhanced debugging function
-def debug_video_search(timed_video_searches):
+def debug_video_search(timed_video_searches, orientation="portrait"):
     """Enhanced debug function to test video search"""
     print("\n" + "="*50)
-    print("=== ENHANCED DEBUG: Video Search Analysis ===")
+    print(f"=== ENHANCED DEBUG: {orientation.upper()} Video Search Analysis ===")
     print("="*50)
     
     # First validate input
@@ -328,7 +398,7 @@ def debug_video_search(timed_video_searches):
         print("❌ Input validation failed - cannot proceed with debug")
         return
     
-    print(f"\n🔍 Analyzing {len(timed_video_searches)} search queries...")
+    print(f"\n🔍 Analyzing {len(timed_video_searches)} search queries for {orientation} videos...")
     
     # Test API key
     if not PEXELS_API_KEY:
@@ -340,7 +410,9 @@ def debug_video_search(timed_video_searches):
     
     # Test a few queries
     test_count = min(3, len(timed_video_searches))
-    print(f"\n🧪 Testing first {test_count} queries:")
+    print(f"\n🧪 Testing first {test_count} queries for {orientation} format:")
+    
+    use_portrait = orientation == "portrait"
     
     for i in range(test_count):
         search_data = timed_video_searches[i]
@@ -356,8 +428,8 @@ def debug_video_search(timed_video_searches):
                     # Test first search term
                     first_term = search_terms[0]
                     if first_term and isinstance(first_term, str):
-                        print(f"Testing '{first_term}'...")
-                        result = getBestVideo(first_term, orientation_landscape=True, used_vids=[])
+                        print(f"Testing '{first_term}' for {orientation}...")
+                        result = getBestVideo(first_term, orientation_portrait=use_portrait, used_vids=[])
                         print(f"Result: {'✅ Found' if result else '❌ Not found'}")
                         if result:
                             print(f"URL: {result}")
@@ -377,21 +449,21 @@ def debug_video_search(timed_video_searches):
 
 # Example usage and testing function
 def test_generate_video_url():
-    """Test function with sample data"""
-    print("🧪 Testing generate_video_url with sample data...")
+    """Test function with sample data for portrait videos"""
+    print("🧪 Testing generate_video_url with sample data for portrait format...")
     
     # Sample test data
     sample_data = [
-        [[0, 5], ["nature", "forest", "trees"]],
-        [[5, 10], ["ocean", "waves", "beach"]],
-        [[10, 15], ["city", "urban", "buildings"]]
+        [[0, 5], ["nature portrait", "vertical forest", "trees mobile"]],
+        [[5, 10], ["ocean vertical", "waves portrait", "beach mobile"]],
+        [[10, 15], ["city vertical", "urban portrait", "buildings mobile"]]
     ]
     
     print("Sample input:")
     for i, item in enumerate(sample_data):
         print(f"  {i+1}. {item}")
     
-    result = generate_video_url(sample_data, "pexel")
+    result = generate_video_url(sample_data, "pexel", "portrait")
     
     print(f"\nTest result: {len(result) if result else 0} items returned")
     return result
