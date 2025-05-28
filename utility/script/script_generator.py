@@ -2,84 +2,155 @@ import os
 import json
 import re
 
-try:
-    from PIL import Image
-    if not hasattr(Image, 'ANTIALIAS'):
-        Image.ANTIALIAS = Image.LANCZOS
-        Image.NEAREST = Image.NEAREST
-        Image.BILINEAR = Image.BILINEAR
-        Image.BICUBIC = Image.BICUBIC
-except ImportError:
-    pass
-def fix_json(json_str):
-    # Replace newline and carriage return characters with their escaped counterparts.
-    json_str = json_str.replace("\n", "\\n")
-    json_str = json_str.replace("\r", "\\r")
+def validate_groq_api():
+    """Validate Groq API key"""
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    if not groq_api_key or len(groq_api_key) <= 30:
+        return False, "No valid Groq API key provided. Please set GROQ_API_KEY environment variable."
+    return True, groq_api_key
+
+def fix_json_response(json_str):
+    """Clean and fix JSON response from API"""
+    if not json_str:
+        return json_str
+    
+    # Remove common formatting issues
+    json_str = json_str.replace("\n", "\\n").replace("\r", "\\r")
+    json_str = json_str.strip()
+    
+    # Find JSON object boundaries
+    json_start = json_str.find('{')
+    json_end = json_str.rfind('}')
+    
+    if json_start != -1 and json_end != -1:
+        return json_str[json_start:json_end+1]
+    
     return json_str
-    
-# Check for a valid Groq API key. Exit if not found.
-groq_api_key = os.environ.get("GROQ_API_KEY")
-if not groq_api_key or len(groq_api_key) <= 30:
-    print("No valid Groq API key provided.")
-    exit(1)
 
-from groq import Groq
-model = "llama3-70b-8192"  # Use your desired model.
-client = Groq(api_key=groq_api_key)
-print("Using Groq API")
-    
 def generate_script(topic):
-    """
-    Generate a compelling story script for StoryForge video creation
-    """
-    prompt = (
-        f"""You are a master storyteller for StoryForge, a platform that creates captivating short-form videos. 
-Your specialty is crafting engaging narratives that are perfect for visual storytelling. 
-Each story should be concise, lasting 45-60 seconds (approximately 120-160 words), and designed to keep viewers hooked from start to finish.
+    """Generate a compelling story script for StoryForge video creation"""
+    
+    # Validate API key
+    is_valid, result = validate_groq_api()
+    if not is_valid:
+        print(f"❌ {result}")
+        return None
+    
+    groq_api_key = result
+    
+    try:
+        from groq import Groq
+        model = "llama3-70b-8192"
+        client = Groq(api_key=groq_api_key)
+        print("✅ Using Groq API for script generation")
+    except ImportError:
+        print("❌ Groq library not installed. Please install with: pip install groq")
+        return None
+    except Exception as e:
+        print(f"❌ Error initializing Groq client: {e}")
+        return None
+    
+    # Craft the story generation prompt
+    prompt = f"""You are an expert storyteller for StoryForge, specializing in creating captivating short-form video narratives.
 
-When given a topic, you create stories that are:
-- Emotionally engaging with clear narrative arcs
-- Visually rich and cinematic
-- Perfect for short-form video content
-- Complete stories with beginning, middle, and end
+Create a compelling story script that is:
+- 45-60 seconds when narrated (approximately 120-160 words)
+- Emotionally engaging with a clear narrative arc
+- Visually rich and perfect for video storytelling
+- Complete with beginning, middle, and satisfying conclusion
 - Relatable and memorable
 
-For example, if the topic is "Lost friendship":
-You would create:
-"Sarah found the old letter tucked between pages of her childhood diary. It was from Emma, her best friend who moved away ten years ago. The faded ink read: 'Promise we'll always stay in touch.' Sarah smiled sadly, remembering how they'd sworn nothing would change. Life had other plans. She picked up her phone, hesitated, then typed: 'Hey Em, been thinking about you.' Three dots appeared immediately. 'Sarah?! I was just looking at our old photos!' Sometimes the best friendships just need a single message to reignite the spark that time couldn't extinguish."
+The story should flow naturally when spoken aloud and be suitable for background video footage.
 
-For topic "{topic}":
-Create a compelling, complete story that would work perfectly as a short video. Make it emotionally resonant, visually engaging, and memorable.
+Topic: '{topic}'
 
-Strictly output the script in JSON format like:
+Requirements:
+- Write in a narrative voice suitable for storytelling
+- Include vivid, visual descriptions
+- Create emotional moments that resonate
+- End with a meaningful conclusion or insight
+- Use language that flows well when spoken
+
+Output your response in this exact JSON format:
 {{"script": "Your complete story script here..."}}
-"""
-    )
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": topic}
-        ]
-    )
-    content = response.choices[0].message.content
+
+Only return the JSON object, nothing else."""
+
     try:
-        # Attempt to decode the JSON response.
-        script = json.loads(content, strict=False)["script"]
-    except Exception as e:
-        print("First JSON decoding failed:", e)
-        print("Raw content:", content)
-        # Extract the JSON object by locating the first '{' and the last '}'.
-        json_start_index = content.find('{')
-        json_end_index = content.rfind('}')
-        if json_start_index != -1 and json_end_index != -1:
-            content_fixed = fix_json(content[json_start_index:json_end_index+1])
+        print(f"🔮 Generating story for topic: '{topic}'...")
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"Create a story about: {topic}"}
+            ],
+            temperature=0.8,  # Higher creativity for storytelling
+            max_tokens=500   # Sufficient for story length
+        )
+        
+        content = response.choices[0].message.content.strip()
+        
+        # Parse the JSON response
+        try:
+            script_data = json.loads(content)
+            script = script_data.get("script", "")
+            
+            if not script:
+                raise ValueError("Empty script in response")
+                
+            print("✅ Story script generated successfully")
+            return script
+            
+        except json.JSONDecodeError as e:
+            print(f"⚠️  JSON parsing failed, attempting to fix: {e}")
+            
+            # Try to fix and re-parse the JSON
+            fixed_content = fix_json_response(content)
             try:
-                script = json.loads(content_fixed, strict=False)["script"]
+                script_data = json.loads(fixed_content)
+                script = script_data.get("script", "")
+                
+                if script:
+                    print("✅ Story script generated successfully (after JSON fix)")
+                    return script
+                else:
+                    raise ValueError("Empty script after JSON fix")
+                    
             except Exception as inner_e:
-                print("ERROR: Failed to decode JSON after fixing:", inner_e)
-                script = ""
+                print(f"❌ Failed to parse JSON even after fixing: {inner_e}")
+                print(f"Raw response: {content[:200]}...")
+                
+                # Last resort: extract script from raw text
+                script_match = re.search(r'"script":\s*"([^"]+)"', content)
+                if script_match:
+                    script = script_match.group(1)
+                    print("✅ Extracted story script from raw response")
+                    return script
+                
+                return None
+                
+    except Exception as e:
+        print(f"❌ Error generating script: {e}")
+        return None
+
+def test_script_generation():
+    """Test function for script generation"""
+    test_topics = [
+        "A lost friendship",
+        "The magic of small moments",
+        "Overcoming fear"
+    ]
+    
+    print("🧪 Testing script generation...")
+    for topic in test_topics:
+        print(f"\n--- Testing: {topic} ---")
+        script = generate_script(topic)
+        if script:
+            print(f"✅ Success! Script length: {len(script)} characters")
+            print(f"Preview: {script[:100]}...")
         else:
-            print("ERROR: No valid JSON object found in response.")
-            script = ""
-    return script
+            print("❌ Failed to generate script")
+
+if __name__ == "__main__":
+    test_script_generation()
