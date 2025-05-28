@@ -1,0 +1,27 @@
+# Core dependencies for text-to-video
+openai==1.31.1
+groq 
+edge-tts==6.1.12
+moviepy==1.0.3
+whisper-timestamped==1.15.4
+openai-whisper
+
+# Updated versions to resolve conflicts
+pydantic>=2.9.2
+scipy>=1.14.0
+tqdm>=4.67
+anyio>=4.8.0,<5.0.0
+httpx
+torch
+numpy>=2.0.0,<3.0.0
+filelock>=3.15
+fsspec>=2025.3.2
+
+# Other required packages
+aiohttp==3.9.5
+requests==2.32.3
+pillow==10.3.0
+imageio==2.34.1
+imageio-ffmpeg==0.5.1
+Jinja2==3.1.4
+tiktoken==0.7.0
