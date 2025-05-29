@@ -133,24 +133,3 @@ Only return the JSON object, nothing else."""
     except Exception as e:
         print(f"❌ Error generating script: {e}")
         return None
-
-def test_script_generation():
-    """Test function for script generation"""
-    test_topics = [
-        "A lost friendship",
-        "The magic of small moments",
-        "Overcoming fear"
-    ]
-    
-    print("🧪 Testing script generation...")
-    for topic in test_topics:
-        print(f"\n--- Testing: {topic} ---")
-        script = generate_script(topic)
-        if script:
-            print(f"✅ Success! Script length: {len(script)} characters")
-            print(f"Preview: {script[:100]}...")
-        else:
-            print("❌ Failed to generate script")
-
-if __name__ == "__main__":
-    test_script_generation()
