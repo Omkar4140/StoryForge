@@ -29,9 +29,165 @@ def get_program_path(program_name):
     program_path = search_program(program_name)
     return program_path
 
+def safe_unpack_caption_data(caption_data, index):
+    """
+    Safely unpack caption data in various formats to avoid 'too many values to unpack' errors.
+    
+    Returns:
+        tuple: (time_info, text, color) or None if invalid format
+    """
+    try:
+        print(f"🔍 Debug: Processing caption {index}: {caption_data} (type: {type(caption_data)})")
+        
+        # Initialize defaults
+        time_info = None
+        text = None
+        color = "white"
+        
+        if isinstance(caption_data, (tuple, list)):
+            length = len(caption_data)
+            print(f"🔍 Debug: Caption is tuple/list with {length} elements")
+            
+            if length == 0:
+                print(f"❌ Caption {index} is empty")
+                return None
+            elif length == 1:
+                # Single element - might be nested data
+                element = caption_data[0]
+                if isinstance(element, (tuple, list)) and len(element) >= 2:
+                    # Nested format: (((start, end), text, color),)
+                    return safe_unpack_caption_data(element, index)
+                else:
+                    print(f"❌ Caption {index} has single element that's not a valid caption: {element}")
+                    return None
+            elif length == 2:
+                # Standard format: (time_info, text)
+                time_info, text = caption_data[0], caption_data[1]
+            elif length == 3:
+                # Extended format: (time_info, text, color)
+                time_info, text, color = caption_data[0], caption_data[1], caption_data[2]
+            elif length > 3:
+                # Too many elements - take first 3
+                print(f"⚠️ Warning: Caption {index} has {length} elements, using first 3")
+                time_info, text, color = caption_data[0], caption_data[1], caption_data[2]
+                
+        elif isinstance(caption_data, dict):
+            # Dictionary format
+            time_info = caption_data.get('time_info') or caption_data.get('timing') or caption_data.get('time')
+            text = caption_data.get('text') or caption_data.get('caption') or caption_data.get('content')
+            color = caption_data.get('color', "white")
+            
+        else:
+            print(f"❌ Caption {index} has unsupported format: {type(caption_data)}")
+            return None
+        
+        # Validate extracted data
+        if not time_info:
+            print(f"❌ Caption {index} missing time_info")
+            return None
+        if not text:
+            print(f"❌ Caption {index} missing text")
+            return None
+        if not color:
+            color = "white"
+            
+        return (time_info, text, color)
+        
+    except Exception as e:
+        print(f"❌ Error unpacking caption {index}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def safe_unpack_time_info(time_info, index):
+    """
+    Safely extract start and end times from time_info in various formats.
+    
+    Returns:
+        tuple: (start_time, end_time) as floats or None if invalid
+    """
+    try:
+        start_time, end_time = None, None
+        
+        if isinstance(time_info, (tuple, list)):
+            if len(time_info) >= 2:
+                start_time, end_time = time_info[0], time_info[1]
+            else:
+                print(f"❌ Time info for caption {index} has insufficient elements: {time_info}")
+                return None
+                
+        elif isinstance(time_info, dict):
+            start_time = time_info.get('start') or time_info.get('t1') or time_info.get('begin')
+            end_time = time_info.get('end') or time_info.get('t2') or time_info.get('finish')
+            
+        else:
+            print(f"❌ Time info for caption {index} has invalid format: {type(time_info)}")
+            return None
+        
+        # Convert to float and validate
+        try:
+            start_time = float(start_time)
+            end_time = float(end_time)
+        except (ValueError, TypeError) as e:
+            print(f"❌ Invalid timestamp values for caption {index}: start={start_time}, end={end_time}")
+            return None
+        
+        if start_time >= end_time:
+            print(f"❌ Invalid time range for caption {index}: {start_time}s >= {end_time}s")
+            return None
+            
+        return (start_time, end_time)
+        
+    except Exception as e:
+        print(f"❌ Error processing time info for caption {index}: {e}")
+        return None
+
+def safe_unpack_video_data(video_data, index):
+    """
+    Safely unpack video data in various formats.
+    
+    Returns:
+        tuple: (time_info, video_url) or None if invalid format
+    """
+    try:
+        print(f"🔍 Debug: Processing video {index}: {video_data} (type: {type(video_data)})")
+        
+        time_info = None
+        video_url = None
+        
+        if isinstance(video_data, (tuple, list)):
+            length = len(video_data)
+            print(f"🔍 Debug: Video data is tuple/list with {length} elements")
+            
+            if length >= 2:
+                time_info, video_url = video_data[0], video_data[1]
+                if length > 2:
+                    print(f"⚠️ Warning: Video data {index} has {length} elements, using first 2")
+            else:
+                print(f"❌ Video data {index} has insufficient elements: {length}")
+                return None
+                
+        elif isinstance(video_data, dict):
+            time_info = video_data.get('time_info') or video_data.get('timing')
+            video_url = video_data.get('url') or video_data.get('video_url')
+            
+        else:
+            print(f"❌ Video data {index} has unsupported format: {type(video_data)}")
+            return None
+        
+        if not time_info or not video_url:
+            print(f"❌ Video data {index} missing required fields: time_info={bool(time_info)}, video_url={bool(video_url)}")
+            return None
+            
+        return (time_info, video_url)
+        
+    except Exception as e:
+        print(f"❌ Error unpacking video data {index}: {e}")
+        return None
+
 def get_output_media(audio_file_path, timed_captions, background_video_data, video_server, orientation="portrait"):
     """
-    Generate video with specified orientation
+    Generate video with specified orientation - FIXED VERSION
     
     Args:
         audio_file_path: Path to audio file
@@ -70,74 +226,24 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"📹 Processing {len(background_video_data)} video segments...")
     
+    # FIXED: Safe video data processing
     for i, video_data in enumerate(background_video_data):
         try:
-            print(f"🔍 Debug: Video data {i}: {video_data} (type: {type(video_data)})")
-            
-            # FIXED: More robust handling of video data formats
-            time_info = None
-            video_url = None
-            
-            if isinstance(video_data, (tuple, list)):
-                print(f"🔍 Debug: Video data length: {len(video_data)}")
-                
-                if len(video_data) >= 2:
-                    # Extract first two elements as time_info and video_url
-                    time_info = video_data[0]
-                    video_url = video_data[1]
-                    
-                    if len(video_data) > 2:
-                        print(f"Warning: Video data {i} has extra elements: {video_data[2:]}")
-                else:
-                    print(f"❌ Invalid video data format at {i}: not enough elements")
-                    continue
-            elif isinstance(video_data, dict):
-                # Handle dictionary format if needed
-                time_info = video_data.get('time_info') or video_data.get('timing')
-                video_url = video_data.get('url') or video_data.get('video_url')
-            else:
-                print(f"❌ Video data {i} is not a supported format: {type(video_data)}")
-                continue
-            
-            if not time_info or not video_url:
-                print(f"❌ Missing time_info or video_url at index {i}")
-                continue
-                    
-            print(f"🔍 Debug: Time info: {time_info} (type: {type(time_info)})")
-            print(f"🔍 Debug: Video URL: {str(video_url)[:100]}...")
-            
-            # FIXED: More robust time info validation
-            t1, t2 = None, None
-            
-            if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
-                t1, t2 = time_info[0], time_info[1]
-            elif isinstance(time_info, dict):
-                t1 = time_info.get('start') or time_info.get('t1')
-                t2 = time_info.get('end') or time_info.get('t2')
-            else:
-                print(f"❌ Invalid time format at {i}: {time_info}")
-                continue
-            
-            if t1 is None or t2 is None:
-                print(f"❌ Could not extract valid timestamps from {time_info}")
+            # Use safe unpacking function
+            unpacked_data = safe_unpack_video_data(video_data, i)
+            if not unpacked_data:
                 continue
                 
-            # Convert to float if needed
-            try:
-                t1, t2 = float(t1), float(t2)
-                print(f"Processing video segment {i}: {t1}s - {t2}s")
-            except (ValueError, TypeError):
-                print(f"❌ Invalid timestamp values: t1={t1}, t2={t2}")
-                continue
-                    
-        except Exception as e:
-            print(f"❌ Error parsing video data {i}: {e}")
-            print(f"Data: {video_data}")
-            import traceback
-            traceback.print_exc()
-            continue
+            time_info, video_url = unpacked_data
             
-        try:
+            # Use safe time extraction
+            time_result = safe_unpack_time_info(time_info, i)
+            if not time_result:
+                continue
+                
+            t1, t2 = time_result
+            print(f"Processing video segment {i}: {t1}s - {t2}s")
+            
             # Download the video file
             video_filename = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
             temp_files.append(video_filename)
@@ -165,7 +271,6 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
             # Resize and crop video to fit target dimensions while maintaining aspect ratio
             if orientation == "portrait":
                 # For portrait videos, we want to fill 1080x1920
-                # Calculate scale to fill the target dimensions
                 scale_w = TARGET_WIDTH / original_w
                 scale_h = TARGET_HEIGHT / original_h
                 scale = max(scale_w, scale_h)  # Use larger scale to fill entire frame
@@ -231,96 +336,24 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
-    # FIXED: Completely rewritten caption processing to handle all formats properly
+    # FIXED: Safe caption processing
     for i, caption_data in enumerate(timed_captions):
         try:
-            print(f"🔍 Debug: Caption data {i}: {caption_data} (type: {type(caption_data)})")
-            
-            # Initialize variables with defaults
-            time_info = None
-            text = None
-            color = "white"
-            
-            # FIXED: Safer unpacking with multiple format support
-            if isinstance(caption_data, (tuple, list)):
-                caption_length = len(caption_data)
-                print(f"🔍 Debug: Caption data length: {caption_length}")
-                
-                if caption_length >= 2:
-                    # Standard format: ((start, end), text) or ((start, end), text, color)
-                    time_info = caption_data[0]
-                    text = caption_data[1]
-                    
-                    # Handle optional color parameter
-                    if caption_length >= 3 and caption_data[2]:
-                        color = caption_data[2]
-                        
-                elif caption_length == 1:
-                    # Handle single element case (shouldn't happen but let's be safe)
-                    print(f"⚠️ Warning: Caption {i} has only one element: {caption_data[0]}")
-                    continue
-                else:
-                    print(f"❌ Caption {i} has no elements")
-                    continue
-                    
-            elif isinstance(caption_data, dict):
-                # Handle dictionary format
-                time_info = caption_data.get('time_info') or caption_data.get('timing') or caption_data.get('time')
-                text = caption_data.get('text') or caption_data.get('caption') or caption_data.get('content')
-                color = caption_data.get('color', "white")
-            else:
-                print(f"❌ Unsupported caption format at index {i}: {type(caption_data)} - {caption_data}")
-                continue
-            
-            # Validate that we have the required data
-            if not time_info:
-                print(f"❌ Missing time_info at caption {i}: {caption_data}")
+            # Use safe unpacking function
+            unpacked_data = safe_unpack_caption_data(caption_data, i)
+            if not unpacked_data:
                 continue
                 
-            if not text:
-                print(f"❌ Missing text at caption {i}: {caption_data}")
+            time_info, text, color = unpacked_data
+            
+            # Use safe time extraction
+            time_result = safe_unpack_time_info(time_info, i)
+            if not time_result:
                 continue
                 
-            print(f"🔍 Debug: Extracted - Time: {time_info}, Text: '{str(text)[:50]}...', Color: {color}")
-            
-            # FIXED: Robust time extraction with multiple format support
-            start_time, end_time = None, None
-            
-            if isinstance(time_info, (tuple, list)):
-                if len(time_info) >= 2:
-                    start_time, end_time = time_info[0], time_info[1]
-                else:
-                    print(f"❌ Time info tuple too short at caption {i}: {time_info}")
-                    continue
-            elif isinstance(time_info, dict):
-                start_time = time_info.get('start') or time_info.get('t1') or time_info.get('begin')
-                end_time = time_info.get('end') or time_info.get('t2') or time_info.get('finish')
-            else:
-                print(f"❌ Invalid time info format at caption {i}: {time_info} (type: {type(time_info)})")
-                continue
-            
-            # Validate and convert timestamps
-            if start_time is None or end_time is None:
-                print(f"❌ Could not extract valid timestamps from {time_info}")
-                continue
-            
-            try:
-                start_time = float(start_time)
-                end_time = float(end_time)
-            except (ValueError, TypeError) as e:
-                print(f"❌ Invalid timestamp values at caption {i}: start={start_time}, end={end_time}, error={e}")
-                continue
-            
-            # Validate timestamp logic
-            if start_time >= end_time:
-                print(f"⚠️ Warning: Invalid time range at caption {i}: {start_time}s >= {end_time}s")
-                continue
-                
+            start_time, end_time = time_result
             duration = end_time - start_time
-            if duration <= 0:
-                print(f"⚠️ Warning: Zero or negative duration at caption {i}: {duration}s")
-                continue
-                
+            
             print(f"Caption {i+1}: [{start_time:.2f}s-{end_time:.2f}s] ({duration:.2f}s) '{str(text)[:50]}{'...' if len(str(text)) > 50 else ''}' [{color}]")
             
             # Create text clip with error handling
