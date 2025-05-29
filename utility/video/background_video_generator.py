@@ -385,7 +385,35 @@ def validate_search_input(timed_video_searches):
             print(f"  ❌ Invalid format - should be [time_segment, search_terms]")
     
     return True
-
+def process_background_video_fixed(background_video_data):
+    """
+    Fixed version for processing background video data
+    """
+    for i, video_data in enumerate(background_video_data):
+        try:
+            # Handle different formats
+            if isinstance(video_data, (tuple, list)):
+                if len(video_data) == 2:
+                    time_info, video_url = video_data
+                elif len(video_data) > 2:
+                    time_info, video_url = video_data[0], video_data[1]
+                    print(f"Warning: Video data {i} has extra elements: {video_data[2:]}")
+                else:
+                    print(f"❌ Invalid video data format at {i}: {video_data}")
+                    continue
+                    
+                # Further validate time_info
+                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
+                    t1, t2 = time_info
+                    print(f"Processing video segment {i}: {t1}s - {t2}s")
+                else:
+                    print(f"❌ Invalid time format at {i}: {time_info}")
+                    continue
+                    
+        except ValueError as e:
+            print(f"❌ Error unpacking video data {i}: {e}")
+            print(f"Data: {video_data}")
+            continue
 # Enhanced debugging function
 def debug_video_search(timed_video_searches, orientation="portrait"):
     """Enhanced debug function to test video search"""
@@ -446,3 +474,39 @@ def debug_video_search(timed_video_searches, orientation="portrait"):
     print("\n" + "="*50)
     print("=== END ENHANCED DEBUG ===")
     print("="*50)
+def safe_unpack(data, expected_count, default_values=None):
+    """
+    Safely unpack data with fallback to defaults
+    
+    Args:
+        data: Data to unpack (tuple, list, etc.)
+        expected_count: Number of values expected
+        default_values: List of default values if unpacking fails
+    
+    Returns:
+        tuple: Unpacked values or defaults
+    """
+    try:
+        if isinstance(data, (tuple, list)):
+            if len(data) == expected_count:
+                return tuple(data)
+            elif len(data) > expected_count:
+                print(f"Warning: More values than expected ({len(data)} > {expected_count}), using first {expected_count}")
+                return tuple(data[:expected_count])
+            else:
+                print(f"Warning: Fewer values than expected ({len(data)} < {expected_count})")
+                if default_values and len(default_values) == expected_count:
+                    # Fill missing values with defaults
+                    result = list(data) + default_values[len(data):]
+                    return tuple(result[:expected_count])
+                else:
+                    raise ValueError(f"Cannot unpack {len(data)} values into {expected_count} variables")
+        else:
+            raise ValueError(f"Data is not iterable: {type(data)}")
+            
+    except Exception as e:
+        print(f"❌ Unpacking error: {e}")
+        if default_values and len(default_values) == expected_count:
+            return tuple(default_values)
+        else:
+            raise
