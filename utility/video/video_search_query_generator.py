@@ -16,41 +16,49 @@ else:
 
 log_directory = ".logs/gpt_logs"
 
-prompt = """# Instructions for StoryForge Visual Search
-Given the following story script and timed captions, extract three visually concrete and specific keywords for each time segment that can be used to search for background videos. The keywords should capture the visual essence of the story moments and emotions being portrayed.
+prompt = """# Instructions for Topic-Aware Visual Search
 
-Important Guidelines for StoryForge:
-- Focus on visual storytelling elements (characters, settings, actions, emotions)
-- Keywords should evoke the mood and atmosphere of the story
-- Use cinematic and narrative-focused search terms
-- Each keyword should be 1-3 words and highly visual
-- Consider emotional visual cues (facial expressions, body language, lighting)
-- Include setting and environment details
-- Think about what viewers would see on screen
+You are generating video search queries for a story/content with a specific TOPIC/THEME. Given the story script, topic context, and timed captions, create three highly relevant and visually specific search terms for each time segment.
 
-For story segments, prioritize:
-- Character actions and expressions
-- Environmental storytelling
-- Emotional moments with visual impact
-- Symbolic or metaphorical visuals
-- Atmospheric elements (lighting, weather, mood)
+CRITICAL REQUIREMENTS:
+1. ALL search terms must be directly related to the MAIN TOPIC/THEME
+2. Keywords should be visually concrete and searchable on stock video platforms
+3. Prioritize topic-relevant imagery over generic visuals
+4. Each keyword should be 1-4 words maximum
+5. Focus on what would actually appear in the video frame
 
-Example transformations:
-'She felt sad remembering her friend' → ['woman crying', 'nostalgic moment', 'old photograph']
-'The old house stood empty' → ['abandoned house', 'empty rooms', 'dusty interior']
-'He ran through the forest' → ['man running', 'dense forest', 'sunlight trees']
+Topic Categories & Approach:
+- TECHNOLOGY/AI: Focus on modern tech, digital interfaces, coding, robotics, futuristic elements
+- BUSINESS/FINANCE: Corporate environments, meetings, charts, money, professional settings
+- HEALTH/WELLNESS: Medical equipment, exercise, healthy food, nature, peaceful environments
+- EDUCATION: Learning environments, books, students, teaching, academic settings
+- TRAVEL/LIFESTYLE: Destinations, transportation, cultural elements, adventures
+- FOOD/COOKING: Ingredients, cooking processes, restaurants, food presentation
+- NATURE/ENVIRONMENT: Natural landscapes, wildlife, weather, outdoor scenes
+- SPORTS/FITNESS: Athletic activities, equipment, training, competitions
+- FAMILY/RELATIONSHIPS: People interactions, home environments, emotional moments
+- ART/CREATIVITY: Artistic processes, creative tools, galleries, performances
 
-Time segments should be 2-4 seconds each, covering the entire story duration consecutively.
+Search Strategy:
+1. Identify the main topic from the script
+2. For each caption segment, find topic-relevant visual elements
+3. Create search terms that combine the topic with the specific content
+4. Prioritize searchable stock video terms
 
-Use only English in your text queries.
-Each search string must depict something visually concrete and cinematic.
-Focus on what the audience would actually see in the video.
+Examples by Topic:
+TECHNOLOGY Script: "AI is changing the world"
+→ ["artificial intelligence", "digital transformation", "tech innovation"]
 
-CRITICAL: Return ONLY the JSON array. No explanations, no markdown formatting, no extra text. Just the raw JSON array starting with [ and ending with ].
+COOKING Script: "The recipe was perfect"
+→ ["cooking preparation", "kitchen ingredients", "food plating"]
 
-Format: [[[t1, t2], ["keyword1", "keyword2", "keyword3"]], [[t2, t3], ["keyword4", "keyword5", "keyword6"]], ...]
+BUSINESS Script: "The meeting was successful"
+→ ["corporate meeting", "business handshake", "office presentation"]
+
+CRITICAL: Return ONLY the JSON array. No explanations, no markdown formatting, no extra text.
+
+Format: [[[t1, t2], ["topic-keyword1", "topic-keyword2", "topic-keyword3"]], [[t2, t3], ["topic-keyword4", "topic-keyword5", "topic-keyword6"]], ...]
 """
-
 def clean_json_response(response_text):
     """
     Removes extra text from API responses and extracts only the valid JSON portion.
