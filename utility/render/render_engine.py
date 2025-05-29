@@ -184,7 +184,7 @@ for i, video_data in enumerate(background_video_data):
             print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
     # Process captions with improved styling for mobile viewing
-    for i, caption_data in enumerate(timed_captions):
+for i, caption_data in enumerate(timed_captions):
         try:
             # Handle both formats: ((start, end), text) and ((start, end), text, color)
             if len(caption_data) == 2:
