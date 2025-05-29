@@ -239,5 +239,4 @@ for i, caption_data in enumerate(timed_captions):
             final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
         
             print("✅ Video rendering complete!")
-        
-  return OUTPUT_FILE_NAME
+      return OUTPUT_FILE_NAME
