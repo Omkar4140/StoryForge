@@ -47,10 +47,16 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
         TARGET_WIDTH = 1080
         TARGET_HEIGHT = 1920
         print("📱 Rendering in PORTRAIT mode (9:16 - 1080x1920)")
+        fontsize = 60
+        stroke_width = 3
+        caption_position = ('center', 'bottom')
     else:
         TARGET_WIDTH = 1920
         TARGET_HEIGHT = 1080
         print("🖥️ Rendering in LANDSCAPE mode (16:9 - 1920x1080)")
+        fontsize = 80
+        stroke_width = 4
+        caption_position = ('center', 'bottom')
     
     magick_path = get_program_path("magick")
     print(f"ImageMagick path: {magick_path}")
@@ -64,7 +70,7 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"📹 Processing {len(background_video_data)} video segments...")
     
-for i, video_data in enumerate(background_video_data):
+    for i, video_data in enumerate(background_video_data):
         try:
             # Handle different formats
             if isinstance(video_data, (tuple, list)):
@@ -181,10 +187,11 @@ for i, video_data in enumerate(background_video_data):
             import traceback
             traceback.print_exc()
             continue
-            print(f"\n📝 Processing {len(timed_captions)} caption segments...")
+    
+    print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
     # Process captions with improved styling for mobile viewing
-for i, caption_data in enumerate(timed_captions):
+    for i, caption_data in enumerate(timed_captions):
         try:
             # Handle both formats: ((start, end), text) and ((start, end), text, color)
             if len(caption_data) == 2:
@@ -220,24 +227,33 @@ for i, caption_data in enumerate(timed_captions):
             print(f"Caption data: {caption_data}")
             continue
 
-            # Load audio
-            print("🎼 Processing audio track...")
-            audio_clip = AudioFileClip(audio_file_path)
-        
-            # Normalize audio
-            audio_clip = audio_normalize(audio_clip)
-        
-            # Combine visual clips
-            print("🎬 Combining video elements...")
-            final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
-        
-            # Add audio to final video
-            final_video = final_video.set_audio(audio_clip)
-        
-            # Render final output
-            print(f"💾 Saving final video to {OUTPUT_FILE_NAME}...")
-            final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
-        
-            print("✅ Video rendering complete!")
-          
-  return OUTPUT_FILE_NAME
+    # Load audio
+    print("🎼 Processing audio track...")
+    audio_clip = AudioFileClip(audio_file_path)
+
+    # Normalize audio
+    audio_clip = audio_normalize(audio_clip)
+
+    # Combine visual clips
+    print("🎬 Combining video elements...")
+    final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
+
+    # Add audio to final video
+    final_video = final_video.set_audio(audio_clip)
+
+    # Render final output
+    print(f"💾 Saving final video to {OUTPUT_FILE_NAME}...")
+    final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
+
+    print("✅ Video rendering complete!")
+    
+    # Clean up temporary files
+    for temp_file in temp_files:
+        try:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+                print(f"🗑️ Cleaned up temporary file: {temp_file}")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not clean up {temp_file}: {e}")
+            
+    return OUTPUT_FILE_NAME
