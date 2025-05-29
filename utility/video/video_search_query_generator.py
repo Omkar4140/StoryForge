@@ -16,7 +16,7 @@ else:
 
 log_directory = ".logs/gpt_logs"
 
-"""# Instructions for StoryForge Visual Search
+prompt = """# Instructions for StoryForge Visual Search
 Given the following story script and timed captions, extract three visually concrete and specific keywords for each time segment that can be used to search for background videos. The keywords should capture the visual essence of the story moments and emotions being portrayed.
 
 Important Guidelines for StoryForge:
