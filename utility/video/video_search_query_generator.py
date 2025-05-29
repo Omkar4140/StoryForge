@@ -291,8 +291,7 @@ def merge_empty_intervals(segments):
     
     merged = []
     i = 0
-    
-while i < len(segments):
+    while i < len(segments):
         try:
             # Safely check segment structure
             if not isinstance(segments[i], list):
@@ -344,4 +343,4 @@ while i < len(segments):
         except Exception as e:
             print(f"❌ General error processing segment {i}: {e}")
             i += 1
-return merged
+    return merged
