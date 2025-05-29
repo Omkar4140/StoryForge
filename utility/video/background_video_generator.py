@@ -446,24 +446,3 @@ def debug_video_search(timed_video_searches, orientation="portrait"):
     print("\n" + "="*50)
     print("=== END ENHANCED DEBUG ===")
     print("="*50)
-
-# Example usage and testing function
-def test_generate_video_url():
-    """Test function with sample data for portrait videos"""
-    print("🧪 Testing generate_video_url with sample data for portrait format...")
-    
-    # Sample test data
-    sample_data = [
-        [[0, 5], ["nature portrait", "vertical forest", "trees mobile"]],
-        [[5, 10], ["ocean vertical", "waves portrait", "beach mobile"]],
-        [[10, 15], ["city vertical", "urban portrait", "buildings mobile"]]
-    ]
-    
-    print("Sample input:")
-    for i, item in enumerate(sample_data):
-        print(f"  {i+1}. {item}")
-    
-    result = generate_video_url(sample_data, "pexel", "portrait")
-    
-    print(f"\nTest result: {len(result) if result else 0} items returned")
-    return result
