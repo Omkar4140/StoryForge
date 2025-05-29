@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 from pathlib import Path
 
-def generate_timed_captions(audio_filename, model_size="base", max_caption_size=15):
+def generate_timed_captions(audio_filename, model_size="base", max_caption_size=15, caption_color="white"):
     """
     Generate timed captions from audio file using Whisper with enhanced error handling
     
@@ -14,9 +14,10 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
         audio_filename (str): Path to the audio file
         model_size (str): Whisper model size ("tiny", "base", "small", "medium", "large")
         max_caption_size (int): Maximum words per caption segment
+        caption_color (str): Color for captions (white, yellow, red, blue, green, etc.)
     
     Returns:
-        list: List of ((start_time, end_time), caption_text) tuples
+        list: List of ((start_time, end_time), caption_text, color) tuples
     """
     
     # Validate input file
@@ -31,6 +32,7 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
     print(f"🎧 Processing audio file: {audio_filename}")
     print(f"🧠 Using Whisper model: {model_size}")
     print(f"📏 Max caption size: {max_caption_size} words")
+    print(f"🎨 Caption color: {caption_color}")
     
     try:
         # Preprocess audio file to ensure compatibility
@@ -65,22 +67,37 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
             except:
                 pass
         
-        if not transcription or 'segments' not in transcription:
+        # Enhanced error checking for transcription result
+        if transcription is None:
+            print("❌ Transcription returned None")
+            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
+        
+        if not isinstance(transcription, dict):
+            print(f"❌ Transcription is not a dictionary, got: {type(transcription)}")
+            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
+        
+        if 'segments' not in transcription:
+            print("❌ No 'segments' key in transcription")
+            print(f"Available keys: {list(transcription.keys()) if isinstance(transcription, dict) else 'N/A'}")
+            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
+        
+        segments = transcription.get('segments', [])
+        if not segments:
             print("❌ No transcription segments found")
-            return []
+            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
         
         print(f"✅ Transcription completed!")
-        print(f"📊 Found {len(transcription['segments'])} segments")
+        print(f"📊 Found {len(segments)} segments")
         
-        # Generate timed captions
-        captions = create_timed_captions(transcription, max_caption_size)
+        # Generate timed captions with color
+        captions = create_timed_captions(transcription, max_caption_size, caption_color)
         
         print(f"✅ Generated {len(captions)} caption segments")
         
         # Preview captions
         print("📋 Caption preview:")
-        for i, ((start, end), text) in enumerate(captions[:3]):
-            print(f"   {i+1}. [{start:.1f}s - {end:.1f}s]: {text}")
+        for i, ((start, end), text, color) in enumerate(captions[:3]):
+            print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
         if len(captions) > 3:
             print(f"   ... and {len(captions) - 3} more")
         
@@ -89,11 +106,13 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
     except Exception as e:
         print(f"❌ Error generating timed captions: {e}")
         print(f"🔍 Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         
         # Try alternative approach with basic whisper
         print("🔄 Attempting fallback transcription...")
         try:
-            return fallback_transcription(audio_filename, model_size, max_caption_size)
+            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
         except Exception as fallback_error:
             print(f"❌ Fallback transcription also failed: {fallback_error}")
             return []
@@ -173,7 +192,7 @@ def preprocess_audio_file(audio_filename):
         print(f"❌ Error preprocessing audio: {e}")
         return None
 
-def fallback_transcription(audio_filename, model_size, max_caption_size):
+def fallback_transcription(audio_filename, model_size, max_caption_size, caption_color):
     """
     Fallback transcription method using basic whisper without timestamps
     """
@@ -218,7 +237,7 @@ def fallback_transcription(audio_filename, model_size, max_caption_size):
         for i, segment in enumerate(segments):
             start_time = i * segment_duration
             end_time = (i + 1) * segment_duration
-            timed_captions.append(((start_time, end_time), segment))
+            timed_captions.append(((start_time, end_time), segment, caption_color))
         
         print(f"✅ Fallback generated {len(timed_captions)} caption segments")
         return timed_captions
@@ -227,16 +246,17 @@ def fallback_transcription(audio_filename, model_size, max_caption_size):
         print(f"❌ Fallback transcription error: {e}")
         return []
 
-def create_timed_captions(whisper_result, max_caption_size=15):
+def create_timed_captions(whisper_result, max_caption_size=15, caption_color="white"):
     """
-    Convert Whisper transcription to timed caption segments
+    Convert Whisper transcription to timed caption segments with color
     
     Args:
         whisper_result (dict): Whisper transcription result
         max_caption_size (int): Maximum words per caption
+        caption_color (str): Color for captions
     
     Returns:
-        list: Timed caption segments
+        list: Timed caption segments with color
     """
     
     if not whisper_result or 'text' not in whisper_result:
@@ -247,7 +267,7 @@ def create_timed_captions(whisper_result, max_caption_size=15):
     
     if not word_timestamps:
         print("⚠️  No word timestamps available, using segment-level timing")
-        return create_segment_based_captions(whisper_result, max_caption_size)
+        return create_segment_based_captions(whisper_result, max_caption_size, caption_color)
     
     # Split text into caption-sized chunks
     full_text = whisper_result['text'].strip()
@@ -260,16 +280,18 @@ def create_timed_captions(whisper_result, max_caption_size=15):
     caption_segments = group_words_by_size(cleaned_words, max_caption_size)
     
     # Assign timestamps to caption segments
-    timed_captions = assign_timestamps_to_captions(caption_segments, word_timestamps, full_text)
+    timed_captions = assign_timestamps_to_captions(caption_segments, word_timestamps, full_text, caption_color)
     
     return timed_captions
 
-def create_segment_based_captions(whisper_result, max_caption_size):
+def create_segment_based_captions(whisper_result, max_caption_size, caption_color):
     """Create captions based on segment-level timestamps when word-level isn't available"""
     captions = []
     
     try:
-        for segment in whisper_result.get('segments', []):
+        segments = whisper_result.get('segments', [])
+        
+        for segment in segments:
             text = segment.get('text', '').strip()
             start = segment.get('start', 0)
             end = segment.get('end', start + 1)
@@ -281,7 +303,7 @@ def create_segment_based_captions(whisper_result, max_caption_size):
             
             # Split long segments into smaller captions
             if len(words) <= max_caption_size:
-                captions.append(((start, end), text))
+                captions.append(((start, end), text, caption_color))
             else:
                 # Split segment into smaller parts
                 segment_duration = end - start
@@ -299,7 +321,7 @@ def create_segment_based_captions(whisper_result, max_caption_size):
                         current_end = start + (segment_duration * progress)
                         
                         caption_text = ' '.join(current_words)
-                        captions.append(((current_start, current_end), caption_text))
+                        captions.append(((current_start, current_end), caption_text, caption_color))
                         
                         current_words = []
                         current_start = current_end
@@ -310,13 +332,31 @@ def create_segment_based_captions(whisper_result, max_caption_size):
     return captions
 
 def create_word_timestamp_mapping(whisper_result):
-    """Create mapping from text positions to timestamps"""
+    """Create mapping from text positions to timestamps with enhanced error handling"""
     word_to_time = {}
     text_position = 0
     
     try:
-        for segment in whisper_result.get('segments', []):
-            for word_info in segment.get('words', []):
+        segments = whisper_result.get('segments', [])
+        
+        for segment in segments:
+            # Check if segment has words with timestamps
+            words = segment.get('words', [])
+            
+            if not words:
+                # Fallback: use segment-level timing
+                text = segment.get('text', '').strip()
+                if text:
+                    start_time = segment.get('start', 0)
+                    end_time = segment.get('end', start_time + 1)
+                    word_to_time[(text_position, text_position + len(text))] = end_time
+                    text_position += len(text) + 1
+                continue
+            
+            for word_info in words:
+                if not isinstance(word_info, dict):
+                    continue
+                    
                 word_text = word_info.get('text', '').strip()
                 word_end_time = word_info.get('end', 0)
                 
@@ -366,8 +406,8 @@ def group_words_by_size(words, max_size):
     
     return segments
 
-def assign_timestamps_to_captions(caption_segments, word_timestamps, full_text):
-    """Assign start and end timestamps to caption segments"""
+def assign_timestamps_to_captions(caption_segments, word_timestamps, full_text, caption_color):
+    """Assign start and end timestamps to caption segments with color"""
     timed_captions = []
     text_position = 0
     start_time = 0
@@ -392,7 +432,7 @@ def assign_timestamps_to_captions(caption_segments, word_timestamps, full_text):
         if end_time <= start_time:
             end_time = start_time + 1.0  # Minimum 1 second duration
         
-        timed_captions.append(((start_time, end_time), segment_text.strip()))
+        timed_captions.append(((start_time, end_time), segment_text.strip(), caption_color))
         
         # Update position and start time for next segment
         text_position = segment_end_pos + 1  # +1 for space
