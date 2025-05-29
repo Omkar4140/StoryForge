@@ -72,8 +72,11 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     for i, video_data in enumerate(background_video_data):
         try:
+            print(f"🔍 Debug: Video data {i}: {video_data} (type: {type(video_data)})")
+            
             # Handle different formats
             if isinstance(video_data, (tuple, list)):
+                print(f"🔍 Debug: Video data length: {len(video_data)}")
                 if len(video_data) == 2:
                     time_info, video_url = video_data
                 elif len(video_data) > 2:
@@ -82,18 +85,25 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
                 else:
                     print(f"❌ Invalid video data format at {i}: {video_data}")
                     continue
+            else:
+                print(f"❌ Video data {i} is not a tuple or list: {type(video_data)}")
+                continue
                     
-                # Further validate time_info
-                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
-                    t1, t2 = time_info
-                    print(f"Processing video segment {i}: {t1}s - {t2}s")
-                else:
-                    print(f"❌ Invalid time format at {i}: {time_info}")
-                    continue
+            print(f"🔍 Debug: Time info: {time_info} (type: {type(time_info)})")
+            
+            # Further validate time_info
+            if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
+                t1, t2 = time_info
+                print(f"Processing video segment {i}: {t1}s - {t2}s")
+            else:
+                print(f"❌ Invalid time format at {i}: {time_info}")
+                continue
                     
-        except ValueError as e:
+        except Exception as e:
             print(f"❌ Error unpacking video data {i}: {e}")
             print(f"Data: {video_data}")
+            import traceback
+            traceback.print_exc()
             continue
             
         try:
@@ -193,12 +203,32 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     # Process captions with improved styling for mobile viewing
     for i, caption_data in enumerate(timed_captions):
         try:
+            print(f"🔍 Debug: Caption data {i}: {caption_data} (type: {type(caption_data)})")
+            print(f"🔍 Debug: Caption data length: {len(caption_data)}")
+            
             # Handle both formats: ((start, end), text) and ((start, end), text, color)
             if len(caption_data) == 2:
-                (t1, t2), text = caption_data
+                time_info, text = caption_data
+                print(f"🔍 Debug: Time info: {time_info}, Text: {text}")
+                
+                # Validate time_info is a tuple/list with 2 elements
+                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
+                    t1, t2 = time_info
+                else:
+                    print(f"❌ Invalid time info format: {time_info}")
+                    continue
+                    
                 color = "white"  # default
             elif len(caption_data) == 3:
-                (t1, t2), text, color = caption_data
+                time_info, text, color = caption_data
+                print(f"🔍 Debug: Time info: {time_info}, Text: {text}, Color: {color}")
+                
+                # Validate time_info is a tuple/list with 2 elements
+                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
+                    t1, t2 = time_info
+                else:
+                    print(f"❌ Invalid time info format: {time_info}")
+                    continue
             else:
                 print(f"❌ Unexpected caption format at index {i}: {caption_data}")
                 continue
@@ -222,9 +252,11 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
 
             visual_clips.append(text_clip)
 
-        except ValueError as e:
+        except Exception as e:
             print(f"❌ Error unpacking caption {i+1}: {e}")
             print(f"Caption data: {caption_data}")
+            import traceback
+            traceback.print_exc()
             continue
 
     # Load audio
