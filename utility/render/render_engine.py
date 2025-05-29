@@ -74,33 +74,64 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
         try:
             print(f"🔍 Debug: Video data {i}: {video_data} (type: {type(video_data)})")
             
-            # Handle different formats
+            # FIXED: More robust handling of video data formats
+            time_info = None
+            video_url = None
+            
             if isinstance(video_data, (tuple, list)):
                 print(f"🔍 Debug: Video data length: {len(video_data)}")
-                if len(video_data) == 2:
-                    time_info, video_url = video_data
-                elif len(video_data) > 2:
-                    time_info, video_url = video_data[0], video_data[1]
-                    print(f"Warning: Video data {i} has extra elements: {video_data[2:]}")
+                
+                if len(video_data) >= 2:
+                    # Extract first two elements as time_info and video_url
+                    time_info = video_data[0]
+                    video_url = video_data[1]
+                    
+                    if len(video_data) > 2:
+                        print(f"Warning: Video data {i} has extra elements: {video_data[2:]}")
                 else:
-                    print(f"❌ Invalid video data format at {i}: {video_data}")
+                    print(f"❌ Invalid video data format at {i}: not enough elements")
                     continue
+            elif isinstance(video_data, dict):
+                # Handle dictionary format if needed
+                time_info = video_data.get('time_info') or video_data.get('timing')
+                video_url = video_data.get('url') or video_data.get('video_url')
             else:
-                print(f"❌ Video data {i} is not a tuple or list: {type(video_data)}")
+                print(f"❌ Video data {i} is not a supported format: {type(video_data)}")
+                continue
+            
+            if not time_info or not video_url:
+                print(f"❌ Missing time_info or video_url at index {i}")
                 continue
                     
             print(f"🔍 Debug: Time info: {time_info} (type: {type(time_info)})")
+            print(f"🔍 Debug: Video URL: {str(video_url)[:100]}...")
             
-            # Further validate time_info
-            if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
-                t1, t2 = time_info
-                print(f"Processing video segment {i}: {t1}s - {t2}s")
+            # FIXED: More robust time info validation
+            t1, t2 = None, None
+            
+            if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
+                t1, t2 = time_info[0], time_info[1]
+            elif isinstance(time_info, dict):
+                t1 = time_info.get('start') or time_info.get('t1')
+                t2 = time_info.get('end') or time_info.get('t2')
             else:
                 print(f"❌ Invalid time format at {i}: {time_info}")
                 continue
+            
+            if t1 is None or t2 is None:
+                print(f"❌ Could not extract valid timestamps from {time_info}")
+                continue
+                
+            # Convert to float if needed
+            try:
+                t1, t2 = float(t1), float(t2)
+                print(f"Processing video segment {i}: {t1}s - {t2}s")
+            except (ValueError, TypeError):
+                print(f"❌ Invalid timestamp values: t1={t1}, t2={t2}")
+                continue
                     
         except Exception as e:
-            print(f"❌ Error unpacking video data {i}: {e}")
+            print(f"❌ Error parsing video data {i}: {e}")
             print(f"Data: {video_data}")
             import traceback
             traceback.print_exc()
@@ -200,46 +231,76 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
-    # Process captions with improved styling for mobile viewing
+    # FIXED: More robust caption processing
     for i, caption_data in enumerate(timed_captions):
         try:
             print(f"🔍 Debug: Caption data {i}: {caption_data} (type: {type(caption_data)})")
-            print(f"🔍 Debug: Caption data length: {len(caption_data)}")
             
-            # Handle both formats: ((start, end), text) and ((start, end), text, color)
-            if len(caption_data) == 2:
-                time_info, text = caption_data
-                print(f"🔍 Debug: Time info: {time_info}, Text: {text}")
+            # Initialize variables
+            time_info = None
+            text = None
+            color = "white"  # default
+            
+            # Handle different caption formats more robustly
+            if isinstance(caption_data, (tuple, list)):
+                print(f"🔍 Debug: Caption data length: {len(caption_data)}")
                 
-                # Validate time_info is a tuple/list with 2 elements
-                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
-                    t1, t2 = time_info
+                if len(caption_data) >= 2:
+                    time_info = caption_data[0]
+                    text = caption_data[1]
+                    
+                    # Optional third element for color
+                    if len(caption_data) >= 3:
+                        color = caption_data[2] or "white"
                 else:
-                    print(f"❌ Invalid time info format: {time_info}")
+                    print(f"❌ Caption data {i} doesn't have enough elements")
                     continue
                     
-                color = "white"  # default
-            elif len(caption_data) == 3:
-                time_info, text, color = caption_data
-                print(f"🔍 Debug: Time info: {time_info}, Text: {text}, Color: {color}")
-                
-                # Validate time_info is a tuple/list with 2 elements
-                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
-                    t1, t2 = time_info
-                else:
-                    print(f"❌ Invalid time info format: {time_info}")
-                    continue
+            elif isinstance(caption_data, dict):
+                # Handle dictionary format
+                time_info = caption_data.get('time_info') or caption_data.get('timing')
+                text = caption_data.get('text') or caption_data.get('caption')
+                color = caption_data.get('color', "white")
             else:
-                print(f"❌ Unexpected caption format at index {i}: {caption_data}")
+                print(f"❌ Unsupported caption format at index {i}: {type(caption_data)}")
+                continue
+            
+            if not time_info or not text:
+                print(f"❌ Missing time_info or text at caption {i}")
+                continue
+                
+            print(f"🔍 Debug: Time info: {time_info}, Text: '{text[:50]}...', Color: {color}")
+            
+            # FIXED: More robust time extraction
+            t1, t2 = None, None
+            
+            if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
+                t1, t2 = time_info[0], time_info[1]
+            elif isinstance(time_info, dict):
+                t1 = time_info.get('start') or time_info.get('t1')
+                t2 = time_info.get('end') or time_info.get('t2')
+            else:
+                print(f"❌ Invalid time info format: {time_info}")
+                continue
+            
+            if t1 is None or t2 is None:
+                print(f"❌ Could not extract valid timestamps from {time_info}")
+                continue
+            
+            # Convert to float if needed
+            try:
+                t1, t2 = float(t1), float(t2)
+            except (ValueError, TypeError):
+                print(f"❌ Invalid timestamp values: t1={t1}, t2={t2}")
                 continue
                 
             print(f"Caption {i+1}: [{t1}s-{t2}s] '{text[:50]}{'...' if len(text) > 50 else ''}'")
             
             # Create text clip with better mobile-friendly styling
             text_clip = TextClip(
-                txt=text,
+                txt=str(text),  # Ensure text is string
                 fontsize=fontsize,
-                color='white',
+                color=color or 'white',
                 stroke_width=stroke_width,
                 method='caption',  # Use caption method for better text wrapping
                 size=(TARGET_WIDTH - 100, None),  # Leave 50px margin on each side
@@ -253,7 +314,7 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
             visual_clips.append(text_clip)
 
         except Exception as e:
-            print(f"❌ Error unpacking caption {i+1}: {e}")
+            print(f"❌ Error processing caption {i+1}: {e}")
             print(f"Caption data: {caption_data}")
             import traceback
             traceback.print_exc()
