@@ -34,6 +34,31 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
     print(f"📏 Max caption size: {max_caption_size} words")
     print(f"🎨 Caption color: {caption_color}")
     
+    # Try whisper_timestamped first, then fallback to basic whisper
+    captions = try_whisper_timestamped(audio_filename, model_size, max_caption_size, caption_color)
+    
+    if not captions:
+        print("🔄 Whisper timestamped failed, trying basic whisper...")
+        captions = fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
+    
+    if captions:
+        print(f"✅ Generated {len(captions)} caption segments")
+        
+        # Preview captions
+        print("📋 Caption preview:")
+        for i, ((start, end), text, color) in enumerate(captions[:3]):
+            print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
+        if len(captions) > 3:
+            print(f"   ... and {len(captions) - 3} more")
+    else:
+        print("❌ All transcription methods failed")
+    
+    return captions
+
+def try_whisper_timestamped(audio_filename, model_size, max_caption_size, caption_color):
+    """
+    Attempt transcription with whisper_timestamped with multiple fallback strategies
+    """
     try:
         # Preprocess audio file to ensure compatibility
         print("🔧 Preprocessing audio file...")
@@ -43,21 +68,59 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
             print("❌ Failed to preprocess audio file")
             return []
         
-        # Load Whisper model
-        print("📥 Loading Whisper model...")
-        model = whisper.load_model(model_size)
+        # Try different whisper_timestamped configurations
+        configurations = [
+            # Most stable configuration
+            {
+                'verbose': False,
+                'fp16': False,
+                'language': 'en',
+                'beam_size': 1,
+                'best_of': 1,
+                'temperature': 0.0,
+                'condition_on_previous_text': False,
+                'compute_word_confidence': False,
+                'include_punctuation_in_confidence': False,
+            },
+            # Simpler configuration
+            {
+                'verbose': False,
+                'fp16': False,
+                'language': 'en',
+                'beam_size': 1,
+                'best_of': 1,
+            },
+            # Minimal configuration
+            {
+                'verbose': False,
+                'fp16': False,
+            }
+        ]
         
-        # Transcribe with timestamps
-        print("🔍 Transcribing audio with timestamps...")
-        transcription = whisper.transcribe_timestamped(
-            model, 
-            processed_audio_path, 
-            verbose=False, 
-            fp16=False,
-            language="en",  # Specify English for better accuracy
-            beam_size=1,   # Reduce beam size for stability
-            best_of=1      # Use single best transcription
-        )
+        model = None
+        transcription = None
+        
+        for i, config in enumerate(configurations):
+            try:
+                print(f"🔍 Trying whisper_timestamped configuration {i + 1}/3...")
+                
+                # Load model if not already loaded
+                if model is None:
+                    print("📥 Loading Whisper model...")
+                    model = whisper.load_model(model_size)
+                
+                # Attempt transcription with current configuration
+                transcription = whisper.transcribe_timestamped(model, processed_audio_path, **config)
+                
+                if transcription and 'segments' in transcription and transcription['segments']:
+                    print(f"✅ Configuration {i + 1} succeeded!")
+                    break
+                else:
+                    print(f"⚠️  Configuration {i + 1} returned empty result")
+                    
+            except Exception as config_error:
+                print(f"⚠️  Configuration {i + 1} failed: {config_error}")
+                continue
         
         # Clean up temporary file if it was created
         if processed_audio_path != audio_filename:
@@ -67,65 +130,26 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
             except:
                 pass
         
-        # Enhanced error checking for transcription result
-        if transcription is None:
-            print("❌ Transcription returned None")
-            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
-        
-        if not isinstance(transcription, dict):
-            print(f"❌ Transcription is not a dictionary, got: {type(transcription)}")
-            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
-        
-        if 'segments' not in transcription:
-            print("❌ No 'segments' key in transcription")
-            print(f"Available keys: {list(transcription.keys()) if isinstance(transcription, dict) else 'N/A'}")
-            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
-        
-        segments = transcription.get('segments', [])
-        if not segments:
-            print("❌ No transcription segments found")
-            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
-        
-        print(f"✅ Transcription completed!")
-        print(f"📊 Found {len(segments)} segments")
-        
-        # Generate timed captions with color
-        captions = create_timed_captions(transcription, max_caption_size, caption_color)
-        
-        print(f"✅ Generated {len(captions)} caption segments")
-        
-        # Preview captions
-        print("📋 Caption preview:")
-        for i, ((start, end), text, color) in enumerate(captions[:3]):
-            print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
-        if len(captions) > 3:
-            print(f"   ... and {len(captions) - 3} more")
-        
-        return captions
-        
-    except Exception as e:
-        print(f"❌ Error generating timed captions: {e}")
-        print(f"🔍 Error type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
-        
-        # Try alternative approach with basic whisper
-        print("🔄 Attempting fallback transcription...")
-        try:
-            return fallback_transcription(audio_filename, model_size, max_caption_size, caption_color)
-        except Exception as fallback_error:
-            print(f"❌ Fallback transcription also failed: {fallback_error}")
+        # Process successful transcription
+        if transcription and 'segments' in transcription and transcription['segments']:
+            segments = transcription['segments']
+            print(f"✅ Transcription completed with {len(segments)} segments")
+            
+            # Generate timed captions with color
+            captions = create_timed_captions(transcription, max_caption_size, caption_color)
+            return captions
+        else:
+            print("❌ All whisper_timestamped configurations failed")
             return []
+            
+    except Exception as e:
+        print(f"❌ Error in whisper_timestamped: {e}")
+        print(f"🔍 Error type: {type(e).__name__}")
+        return []
 
 def preprocess_audio_file(audio_filename):
     """
     Preprocess audio file to ensure compatibility with Whisper
-    
-    Args:
-        audio_filename (str): Path to original audio file
-    
-    Returns:
-        str: Path to processed audio file (may be same as input if no processing needed)
     """
     try:
         print("🔍 Analyzing audio file...")
@@ -143,6 +167,11 @@ def preprocess_audio_file(audio_filename):
                 
             if np.all(audio_data == 0):
                 print("❌ Audio file contains only silence")
+                return None
+            
+            # Check for very short audio (less than 0.1 seconds)
+            if len(audio_data) / sample_rate < 0.1:
+                print("❌ Audio file is too short (< 0.1 seconds)")
                 return None
             
         except Exception as e:
@@ -171,12 +200,18 @@ def preprocess_audio_file(audio_filename):
             print("🔄 Converting to mono")
             needs_conversion = True
         
+        # Normalize audio to prevent clipping issues
+        if np.max(np.abs(audio_data)) > 0:
+            audio_data = audio_data / np.max(np.abs(audio_data)) * 0.9
+            needs_conversion = True
+        
         if needs_conversion:
             # Resample and convert to mono
             if len(audio_data.shape) > 1:
                 audio_data = librosa.to_mono(audio_data.T)  # Convert to mono
             
-            audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=target_sr)
+            if sample_rate != target_sr:
+                audio_data = librosa.resample(audio_data, orig_sr=sample_rate, target_sr=target_sr)
             
             # Create temporary file
             temp_file_path = audio_filename.rsplit('.', 1)[0] + '_processed.wav'
@@ -196,24 +231,54 @@ def fallback_transcription(audio_filename, model_size, max_caption_size, caption
     """
     Fallback transcription method using basic whisper without timestamps
     """
-    print("🔄 Using fallback transcription without detailed timestamps...")
+    print("🔄 Using fallback transcription with basic whisper...")
     
     try:
         import whisper as basic_whisper
         
         # Load basic whisper model
+        print("📥 Loading basic Whisper model...")
         model = basic_whisper.load_model(model_size)
         
-        # Basic transcription
-        result = model.transcribe(audio_filename, language="en")
+        # Basic transcription with multiple attempts
+        result = None
         
-        if not result or 'text' not in result:
-            print("❌ Fallback transcription failed")
+        # Try different configurations for basic whisper
+        configs = [
+            {'language': 'en', 'fp16': False, 'temperature': 0.0},
+            {'language': 'en', 'fp16': False},
+            {'fp16': False},
+            {}  # Default configuration
+        ]
+        
+        for i, config in enumerate(configs):
+            try:
+                print(f"🔍 Trying basic whisper configuration {i + 1}/4...")
+                result = model.transcribe(audio_filename, **config)
+                
+                if result and 'text' in result and result['text'].strip():
+                    print(f"✅ Basic whisper configuration {i + 1} succeeded!")
+                    break
+                else:
+                    print(f"⚠️  Configuration {i + 1} returned empty result")
+                    
+            except Exception as config_error:
+                print(f"⚠️  Configuration {i + 1} failed: {config_error}")
+                continue
+        
+        if not result or 'text' not in result or not result['text'].strip():
+            print("❌ All basic whisper configurations failed")
             return []
         
         # Create simple timed segments (estimate timing)
         text = result['text'].strip()
         words = text.split()
+        
+        if not words:
+            print("❌ No words found in transcription")
+            return []
+        
+        print(f"✅ Transcribed {len(words)} words: '{text[:100]}{'...' if len(text) > 100 else ''}'")
         
         # Group words into segments
         segments = []
@@ -229,14 +294,21 @@ def fallback_transcription(audio_filename, model_size, max_caption_size, caption
         if current_segment:
             segments.append(' '.join(current_segment))
         
-        # Estimate timing (rough approximation)
-        total_duration = len(words) * 0.5  # Assume ~0.5 seconds per word
+        # Estimate timing based on audio duration
+        try:
+            # Get actual audio duration
+            audio_data, sample_rate = librosa.load(audio_filename, sr=None)
+            total_duration = len(audio_data) / sample_rate
+        except:
+            # Fallback: estimate based on word count
+            total_duration = len(words) * 0.6  # ~0.6 seconds per word
+        
         segment_duration = total_duration / len(segments) if segments else 1.0
         
         timed_captions = []
         for i, segment in enumerate(segments):
             start_time = i * segment_duration
-            end_time = (i + 1) * segment_duration
+            end_time = min((i + 1) * segment_duration, total_duration)
             timed_captions.append(((start_time, end_time), segment, caption_color))
         
         print(f"✅ Fallback generated {len(timed_captions)} caption segments")
@@ -244,19 +316,13 @@ def fallback_transcription(audio_filename, model_size, max_caption_size, caption
         
     except Exception as e:
         print(f"❌ Fallback transcription error: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def create_timed_captions(whisper_result, max_caption_size=15, caption_color="white"):
     """
     Convert Whisper transcription to timed caption segments with color
-    
-    Args:
-        whisper_result (dict): Whisper transcription result
-        max_caption_size (int): Maximum words per caption
-        caption_color (str): Color for captions
-    
-    Returns:
-        list: Timed caption segments with color
     """
     
     if not whisper_result or 'text' not in whisper_result:
@@ -306,7 +372,7 @@ def create_segment_based_captions(whisper_result, max_caption_size, caption_colo
                 captions.append(((start, end), text, caption_color))
             else:
                 # Split segment into smaller parts
-                segment_duration = end - start
+                segment_duration = max(end - start, 0.1)  # Ensure minimum duration
                 word_count = len(words)
                 
                 current_words = []
