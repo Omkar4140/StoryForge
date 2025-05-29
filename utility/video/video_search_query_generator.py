@@ -292,19 +292,34 @@ def merge_empty_intervals(segments):
     merged = []
     i = 0
     
-    while i < len(segments):
+while i < len(segments):
         try:
-            if not isinstance(segments[i], list) or len(segments[i]) < 2:
-                print(f"Warning: Invalid segment format at index {i}: {segments[i]}")
+            # Safely check segment structure
+            if not isinstance(segments[i], list):
+                print(f"Warning: Segment at index {i} is not a list: {segments[i]}")
                 i += 1
                 continue
                 
-            interval, url = segments[i]
+            # Handle different segment formats
+            segment = segments[i]
+            if len(segment) == 2:
+                interval, url = segment
+            elif len(segment) > 2:
+                # Take first two elements if more than 2
+                interval, url = segment[0], segment[1]
+                print(f"Warning: Segment {i} has more than 2 elements, using first 2")
+            else:
+                print(f"Warning: Segment {i} has less than 2 elements: {segment}")
+                i += 1
+                continue
             
             if url is None:
                 # Find consecutive None intervals
                 j = i + 1
-                while j < len(segments) and len(segments[j]) >= 2 and segments[j][1] is None:
+                while (j < len(segments) and 
+                       isinstance(segments[j], list) and 
+                       len(segments[j]) >= 2 and 
+                       segments[j][1] is None):
                     j += 1
                 
                 # Merge consecutive None intervals with the previous valid URL
@@ -322,26 +337,12 @@ def merge_empty_intervals(segments):
                 merged.append([interval, url])
                 i += 1
                 
+        except ValueError as e:
+            print(f"❌ Unpacking error at segment {i}: {e}")
+            print(f"Segment data: {segments[i] if i < len(segments) else 'Index out of range'}")
+            i += 1
         except Exception as e:
-            print(f"Error processing segment {i}: {e}")
+            print(f"❌ General error processing segment {i}: {e}")
             i += 1
     
     return merged
-
-# Test function for debugging
-def test_json_parsing():
-    """Test the JSON parsing functions"""
-    test_cases = [
-        '[[[0, 5], ["test keyword", "another keyword", "third keyword"]]]',
-        '```json\n[[[0, 5], ["test", "keyword", "example"]]]\n```',
-        '[[[0 5] ["broken" "json" "format"]]]',  # Missing comma
-        'Some text before [[[0, 5], ["keyword"]]] some text after',
-    ]
-    
-    for i, test_case in enumerate(test_cases):
-        print(f"\nTest case {i + 1}: {test_case}")
-        result = advanced_json_parse(test_case)
-        print(f"Result: {result}")
-
-if __name__ == "__main__":
-    test_json_parsing()
