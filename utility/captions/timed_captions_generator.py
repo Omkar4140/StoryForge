@@ -6,7 +6,22 @@ import soundfile as sf
 from pathlib import Path
 import json
 
- if not os.path.exists(audio_filename):
+def generate_timed_captions(audio_filename, model_size="base", max_caption_size=15, caption_color="white"):
+    """
+    Generate timed captions using Whisper
+    
+    Args:
+        audio_filename (str): Path to the audio file
+        model_size (str): Whisper model size ("tiny", "base", "small", "medium", "large")
+        max_caption_size (int): Maximum words per caption segment
+        caption_color (str): Color for captions
+    
+    Returns:
+        list: List of ((start_time, end_time), caption_text, color) tuples
+    """
+    
+    # Validate input file
+    if not os.path.exists(audio_filename):
         print(f"❌ Audio file not found: {audio_filename}")
         return []
     
@@ -72,7 +87,6 @@ import json
     except Exception as e:
         print(f"❌ Error: {e}")
         return []
-
 
 
 def validate_caption_format(captions):
