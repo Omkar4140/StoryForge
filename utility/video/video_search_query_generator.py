@@ -344,5 +344,5 @@ while i < len(segments):
         except Exception as e:
             print(f"❌ General error processing segment {i}: {e}")
             i += 1
-    
-    return merged
+            
+        return merged
