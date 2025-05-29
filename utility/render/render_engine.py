@@ -65,20 +65,30 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     print(f"📹 Processing {len(background_video_data)} video segments...")
     
 for i, video_data in enumerate(background_video_data):
-    try:
-      if isinstance(video_data, (list, tuple)) and len(video_data) >= 2:
-        time_info, video_url = video_data[0], video_data[1]
-        if isinstance(time_info, (list, tuple)) and len(time_info) == 2:
-          t1, t2 = time_info
-        else:
-          print(f"❌ Invalid time format in video {i}: {time_info}")
-          continue
-        else:
-          print(f"❌ Invalid video data format at {i}: {video_data}")
-          continue
-    except Exception as e:
-        print(f"❌ Error processing video {i}: {e}")
-        continue
+        try:
+            # Handle different formats
+            if isinstance(video_data, (tuple, list)):
+                if len(video_data) == 2:
+                    time_info, video_url = video_data
+                elif len(video_data) > 2:
+                    time_info, video_url = video_data[0], video_data[1]
+                    print(f"Warning: Video data {i} has extra elements: {video_data[2:]}")
+                else:
+                    print(f"❌ Invalid video data format at {i}: {video_data}")
+                    continue
+                    
+                # Further validate time_info
+                if isinstance(time_info, (tuple, list)) and len(time_info) == 2:
+                    t1, t2 = time_info
+                    print(f"Processing video segment {i}: {t1}s - {t2}s")
+                else:
+                    print(f"❌ Invalid time format at {i}: {time_info}")
+                    continue
+                    
+        except ValueError as e:
+            print(f"❌ Error unpacking video data {i}: {e}")
+            print(f"Data: {video_data}")
+            continue
             
         try:
             # Download the video file
