@@ -168,20 +168,19 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
     # Process captions with improved styling for mobile viewing
-    for i, ((t1, t2), text) in enumerate(timed_captions):
+    for i, caption_data in enumerate(timed_captions):
         try:
-            print(f"Caption {i+1}: [{t1}s-{t2}s] '{text[:50]}{'...' if len(text) > 50 else ''}'")
-            
-            # Adjust font size based on orientation
-            if orientation == "portrait":
-                fontsize = 60  # Smaller font for portrait to fit mobile screens
-                stroke_width = 2
-                # Position captions in lower third for portrait
-                caption_position = ('center', TARGET_HEIGHT - 300)  # 300px from bottom
+            # Handle both formats: ((start, end), text) and ((start, end), text, color)
+            if len(caption_data) == 2:
+                (t1, t2), text = caption_data
+                color = "white"  # default
+            elif len(caption_data) == 3:
+                (t1, t2), text, color = caption_data
             else:
-                fontsize = 80  # Larger font for landscape
-                stroke_width = 3
-                caption_position = ('center', TARGET_HEIGHT - 200)  # 200px from bottom
+                print(f"❌ Unexpected caption format at index {i}: {caption_data}")
+                continue
+                
+            print(f"Caption {i+1}: [{t1}s-{t2}s] '{text[:50]}{'...' if len(text) > 50 else ''}'")
             
             # Create text clip with better mobile-friendly styling
             text_clip = TextClip(
@@ -189,7 +188,6 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
                 fontsize=fontsize,
                 color='white',
                 stroke_width=stroke_width,
-                stroke_color='black',
                 method='caption',  # Use caption method for better text wrapping
                 size=(TARGET_WIDTH - 100, None),  # Leave 50px margin on each side
                 align='center'
