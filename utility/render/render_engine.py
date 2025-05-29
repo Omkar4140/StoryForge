@@ -231,87 +231,123 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
-    # FIXED: More robust caption processing
+    # FIXED: Completely rewritten caption processing to handle all formats properly
     for i, caption_data in enumerate(timed_captions):
         try:
             print(f"🔍 Debug: Caption data {i}: {caption_data} (type: {type(caption_data)})")
             
-            # Initialize variables
+            # Initialize variables with defaults
             time_info = None
             text = None
-            color = "white"  # default
+            color = "white"
             
-            # Handle different caption formats more robustly
+            # FIXED: Safer unpacking with multiple format support
             if isinstance(caption_data, (tuple, list)):
-                print(f"🔍 Debug: Caption data length: {len(caption_data)}")
+                caption_length = len(caption_data)
+                print(f"🔍 Debug: Caption data length: {caption_length}")
                 
-                if len(caption_data) >= 2:
+                if caption_length >= 2:
+                    # Standard format: ((start, end), text) or ((start, end), text, color)
                     time_info = caption_data[0]
                     text = caption_data[1]
                     
-                    # Optional third element for color
-                    if len(caption_data) >= 3:
-                        color = caption_data[2] or "white"
+                    # Handle optional color parameter
+                    if caption_length >= 3 and caption_data[2]:
+                        color = caption_data[2]
+                        
+                elif caption_length == 1:
+                    # Handle single element case (shouldn't happen but let's be safe)
+                    print(f"⚠️ Warning: Caption {i} has only one element: {caption_data[0]}")
+                    continue
                 else:
-                    print(f"❌ Caption data {i} doesn't have enough elements")
+                    print(f"❌ Caption {i} has no elements")
                     continue
                     
             elif isinstance(caption_data, dict):
                 # Handle dictionary format
-                time_info = caption_data.get('time_info') or caption_data.get('timing')
-                text = caption_data.get('text') or caption_data.get('caption')
+                time_info = caption_data.get('time_info') or caption_data.get('timing') or caption_data.get('time')
+                text = caption_data.get('text') or caption_data.get('caption') or caption_data.get('content')
                 color = caption_data.get('color', "white")
             else:
-                print(f"❌ Unsupported caption format at index {i}: {type(caption_data)}")
+                print(f"❌ Unsupported caption format at index {i}: {type(caption_data)} - {caption_data}")
                 continue
             
-            if not time_info or not text:
-                print(f"❌ Missing time_info or text at caption {i}")
+            # Validate that we have the required data
+            if not time_info:
+                print(f"❌ Missing time_info at caption {i}: {caption_data}")
                 continue
                 
-            print(f"🔍 Debug: Time info: {time_info}, Text: '{text[:50]}...', Color: {color}")
+            if not text:
+                print(f"❌ Missing text at caption {i}: {caption_data}")
+                continue
+                
+            print(f"🔍 Debug: Extracted - Time: {time_info}, Text: '{str(text)[:50]}...', Color: {color}")
             
-            # FIXED: More robust time extraction
-            t1, t2 = None, None
+            # FIXED: Robust time extraction with multiple format support
+            start_time, end_time = None, None
             
-            if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
-                t1, t2 = time_info[0], time_info[1]
+            if isinstance(time_info, (tuple, list)):
+                if len(time_info) >= 2:
+                    start_time, end_time = time_info[0], time_info[1]
+                else:
+                    print(f"❌ Time info tuple too short at caption {i}: {time_info}")
+                    continue
             elif isinstance(time_info, dict):
-                t1 = time_info.get('start') or time_info.get('t1')
-                t2 = time_info.get('end') or time_info.get('t2')
+                start_time = time_info.get('start') or time_info.get('t1') or time_info.get('begin')
+                end_time = time_info.get('end') or time_info.get('t2') or time_info.get('finish')
             else:
-                print(f"❌ Invalid time info format: {time_info}")
+                print(f"❌ Invalid time info format at caption {i}: {time_info} (type: {type(time_info)})")
                 continue
             
-            if t1 is None or t2 is None:
+            # Validate and convert timestamps
+            if start_time is None or end_time is None:
                 print(f"❌ Could not extract valid timestamps from {time_info}")
                 continue
             
-            # Convert to float if needed
             try:
-                t1, t2 = float(t1), float(t2)
-            except (ValueError, TypeError):
-                print(f"❌ Invalid timestamp values: t1={t1}, t2={t2}")
+                start_time = float(start_time)
+                end_time = float(end_time)
+            except (ValueError, TypeError) as e:
+                print(f"❌ Invalid timestamp values at caption {i}: start={start_time}, end={end_time}, error={e}")
+                continue
+            
+            # Validate timestamp logic
+            if start_time >= end_time:
+                print(f"⚠️ Warning: Invalid time range at caption {i}: {start_time}s >= {end_time}s")
                 continue
                 
-            print(f"Caption {i+1}: [{t1}s-{t2}s] '{text[:50]}{'...' if len(text) > 50 else ''}'")
+            duration = end_time - start_time
+            if duration <= 0:
+                print(f"⚠️ Warning: Zero or negative duration at caption {i}: {duration}s")
+                continue
+                
+            print(f"Caption {i+1}: [{start_time:.2f}s-{end_time:.2f}s] ({duration:.2f}s) '{str(text)[:50]}{'...' if len(str(text)) > 50 else ''}' [{color}]")
             
-            # Create text clip with better mobile-friendly styling
-            text_clip = TextClip(
-                txt=str(text),  # Ensure text is string
-                fontsize=fontsize,
-                color=color or 'white',
-                stroke_width=stroke_width,
-                method='caption',  # Use caption method for better text wrapping
-                size=(TARGET_WIDTH - 100, None),  # Leave 50px margin on each side
-                align='center'
-            )
-            
-            text_clip = text_clip.set_start(t1)
-            text_clip = text_clip.set_duration(t2 - t1)
-            text_clip = text_clip.set_position(caption_position)
+            # Create text clip with error handling
+            try:
+                text_clip = TextClip(
+                    txt=str(text).strip(),  # Ensure text is string and strip whitespace
+                    fontsize=fontsize,
+                    color=color or 'white',
+                    stroke_width=stroke_width,
+                    stroke_color='black',  # Add stroke for better readability
+                    method='caption',  # Use caption method for better text wrapping
+                    size=(TARGET_WIDTH - 100, None),  # Leave 50px margin on each side
+                    align='center'
+                )
+                
+                text_clip = text_clip.set_start(start_time)
+                text_clip = text_clip.set_duration(duration)
+                text_clip = text_clip.set_position(caption_position)
 
-            visual_clips.append(text_clip)
+                visual_clips.append(text_clip)
+                print(f"✅ Successfully created text clip for caption {i+1}")
+
+            except Exception as text_error:
+                print(f"❌ Error creating text clip for caption {i+1}: {text_error}")
+                print(f"   Text: '{str(text)[:100]}...'")
+                print(f"   Parameters: fontsize={fontsize}, color={color}, duration={duration}")
+                continue
 
         except Exception as e:
             print(f"❌ Error processing caption {i+1}: {e}")
@@ -320,33 +356,71 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
             traceback.print_exc()
             continue
 
+    print(f"\n✅ Successfully processed {len([clip for clip in visual_clips if hasattr(clip, 'txt')])} caption clips")
+    print(f"✅ Successfully processed {len([clip for clip in visual_clips if not hasattr(clip, 'txt')])} video clips")
+    print(f"📊 Total visual clips: {len(visual_clips)}")
+
+    if not visual_clips:
+        print("❌ No visual clips were created! Check your input data.")
+        return None
+
     # Load audio
     print("🎼 Processing audio track...")
-    audio_clip = AudioFileClip(audio_file_path)
-
-    # Normalize audio
-    audio_clip = audio_normalize(audio_clip)
+    try:
+        audio_clip = AudioFileClip(audio_file_path)
+        print(f"✅ Audio loaded: {audio_clip.duration:.2f}s")
+        
+        # Normalize audio
+        audio_clip = audio_normalize(audio_clip)
+        print(f"✅ Audio normalized")
+    except Exception as e:
+        print(f"❌ Error loading audio: {e}")
+        return None
 
     # Combine visual clips
     print("🎬 Combining video elements...")
-    final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
-
-    # Add audio to final video
-    final_video = final_video.set_audio(audio_clip)
+    try:
+        final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
+        print(f"✅ Video composite created: {final_video.w}x{final_video.h}")
+        
+        # Add audio to final video
+        final_video = final_video.set_audio(audio_clip)
+        print(f"✅ Audio added to video")
+        
+    except Exception as e:
+        print(f"❌ Error creating composite video: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
     # Render final output
     print(f"💾 Saving final video to {OUTPUT_FILE_NAME}...")
-    final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
-
-    print("✅ Video rendering complete!")
+    try:
+        final_video.write_videofile(
+            OUTPUT_FILE_NAME, 
+            fps=30, 
+            codec="libx264", 
+            audio_codec="aac",
+            verbose=False,  # Reduce console output
+            logger=None  # Disable moviepy progress bar
+        )
+        print("✅ Video rendering complete!")
+        
+    except Exception as e:
+        print(f"❌ Error rendering final video: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
     
     # Clean up temporary files
+    print("🧹 Cleaning up temporary files...")
     for temp_file in temp_files:
         try:
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
-                print(f"🗑️ Cleaned up temporary file: {temp_file}")
+                print(f"🗑️ Cleaned up: {os.path.basename(temp_file)}")
         except Exception as e:
             print(f"⚠️ Warning: Could not clean up {temp_file}: {e}")
-            
+    
+    print(f"🎉 Successfully created: {OUTPUT_FILE_NAME}")
     return OUTPUT_FILE_NAME
