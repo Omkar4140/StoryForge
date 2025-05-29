@@ -64,18 +64,18 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"📹 Processing {len(background_video_data)} video segments...")
     
-  for i, video_data in enumerate(background_video_data):
+for i, video_data in enumerate(background_video_data):
     try:
-        if isinstance(video_data, (list, tuple)) and len(video_data) >= 2:
-            time_info, video_url = video_data[0], video_data[1]
-            if isinstance(time_info, (list, tuple)) and len(time_info) == 2:
-                t1, t2 = time_info
-            else:
-                print(f"❌ Invalid time format in video {i}: {time_info}")
-                continue
+      if isinstance(video_data, (list, tuple)) and len(video_data) >= 2:
+        time_info, video_url = video_data[0], video_data[1]
+        if isinstance(time_info, (list, tuple)) and len(time_info) == 2:
+          t1, t2 = time_info
         else:
-            print(f"❌ Invalid video data format at {i}: {video_data}")
-            continue
+          print(f"❌ Invalid time format in video {i}: {time_info}")
+          continue
+        else:
+          print(f"❌ Invalid video data format at {i}: {video_data}")
+          continue
     except Exception as e:
         print(f"❌ Error processing video {i}: {e}")
         continue
