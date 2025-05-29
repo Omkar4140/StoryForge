@@ -5,6 +5,8 @@ import numpy as np
 import soundfile as sf
 from pathlib import Path
 import json
+import whisper
+
 
 def generate_timed_captions(audio_filename, model_size="base", max_caption_size=15, caption_color="white"):
     """
