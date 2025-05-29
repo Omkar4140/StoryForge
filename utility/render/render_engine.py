@@ -220,24 +220,24 @@ for i, caption_data in enumerate(timed_captions):
             print(f"Caption data: {caption_data}")
             continue
 
-    # Load audio
-    print("🎼 Processing audio track...")
-    audio_clip = AudioFileClip(audio_file_path)
-
-    # Normalize audio
-    audio_clip = audio_normalize(audio_clip)
-
-    # Combine visual clips
-    print("🎬 Combining video elements...")
-    final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
-
-    # Add audio to final video
-    final_video = final_video.set_audio(audio_clip)
-
-    # Render final output
-    print(f"💾 Saving final video to {OUTPUT_FILE_NAME}...")
-    final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
-
-    print("✅ Video rendering complete!")
-
-    return OUTPUT_FILE_NAME
+            # Load audio
+            print("🎼 Processing audio track...")
+            audio_clip = AudioFileClip(audio_file_path)
+        
+            # Normalize audio
+            audio_clip = audio_normalize(audio_clip)
+        
+            # Combine visual clips
+            print("🎬 Combining video elements...")
+            final_video = CompositeVideoClip(visual_clips, size=(TARGET_WIDTH, TARGET_HEIGHT))
+        
+            # Add audio to final video
+            final_video = final_video.set_audio(audio_clip)
+        
+            # Render final output
+            print(f"💾 Saving final video to {OUTPUT_FILE_NAME}...")
+            final_video.write_videofile(OUTPUT_FILE_NAME, fps=30, codec="libx264", audio_codec="aac")
+        
+            print("✅ Video rendering complete!")
+        
+            return OUTPUT_FILE_NAME
