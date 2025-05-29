@@ -104,22 +104,3 @@ def get_available_voices():
         "en-US-SaraNeural",     # Professional female voice
         "en-US-TonyNeural"      # Confident male voice
     ]
-
-async def test_audio_generation():
-    """Test function for audio generation"""
-    test_script = """Once upon a time, in a small village nestled between rolling hills, there lived a young girl named Luna who discovered that every star in the night sky held a secret wish from someone in the world. Each evening, she would climb to her rooftop and listen carefully to the whispers carried by the wind, collecting these dreams in a small golden jar that glowed brighter with each wish it contained."""
-    
-    print("🧪 Testing audio generation...")
-    print(f"📝 Test script: {test_script[:100]}...")
-    
-    success = await generate_audio(test_script, "test_audio.wav")
-    
-    if success:
-        print("✅ Audio generation test passed!")
-    else:
-        print("❌ Audio generation test failed!")
-    
-    return success
-
-if __name__ == "__main__":
-    asyncio.run(test_audio_generation())
