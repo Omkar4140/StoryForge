@@ -199,8 +199,9 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
 
             visual_clips.append(text_clip)
 
-        except Exception as e:
-            print(f"❌ Error processing caption {i+1}: {e}")
+        except ValueError as e:
+            print(f"❌ Error unpacking caption {i+1}: {e}")
+            print(f"Caption data: {caption_data}")
             continue
 
     # Load audio
