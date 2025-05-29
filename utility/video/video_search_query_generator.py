@@ -7,7 +7,7 @@ from utility.utils import log_response, LOG_TYPE_GPT
 # Initialize client
 if os.environ.get("GROQ_API_KEY") and len(os.environ.get("GROQ_API_KEY")) > 30:
     from groq import Groq
-    model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    model = "llama3-70b-8192"
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     print("Using Groq API")
 else:
