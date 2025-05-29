@@ -240,4 +240,4 @@ for i, caption_data in enumerate(timed_captions):
         
             print("✅ Video rendering complete!")
         
-            return OUTPUT_FILE_NAME
+    return OUTPUT_FILE_NAME
