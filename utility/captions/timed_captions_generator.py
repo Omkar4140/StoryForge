@@ -55,16 +55,53 @@ def generate_timed_captions(audio_filename, model_size="base", max_caption_size=
             if captions:
                 print(f"✅ {method_name} succeeded with {len(captions)} captions!")
                 preview_captions(captions)
-                return captions
+                # Validate caption format before returning
+                validated_captions = validate_caption_format(captions)
+                return validated_captions
             else:
                 print(f"⚠️  {method_name} returned no captions")
                 
         except Exception as e:
             print(f"❌ {method_name} failed: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     print("❌ All methods failed")
     return []
+
+def validate_caption_format(captions):
+    """Ensure all captions have the correct format: ((start, end), text, color)"""
+    validated = []
+    
+    for i, caption in enumerate(captions):
+        try:
+            if isinstance(caption, (tuple, list)) and len(caption) >= 2:
+                time_info = caption[0]
+                text = caption[1]
+                color = caption[2] if len(caption) > 2 else "white"
+                
+                # Ensure time_info is a tuple of two numbers
+                if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
+                    start_time = float(time_info[0])
+                    end_time = float(time_info[1])
+                    
+                    # Ensure text is a string
+                    text = str(text).strip()
+                    
+                    if text:  # Only add non-empty captions
+                        validated.append(((start_time, end_time), text, color))
+                else:
+                    print(f"⚠️  Skipping caption {i}: invalid time format {time_info}")
+            else:
+                print(f"⚠️  Skipping caption {i}: invalid format {caption}")
+                
+        except Exception as e:
+            print(f"⚠️  Error validating caption {i}: {e}")
+            continue
+    
+    print(f"✅ Validated {len(validated)} captions out of {len(captions)}")
+    return validated
 
 def try_faster_whisper(audio_filename, model_size, max_caption_size, caption_color):
     """
@@ -93,39 +130,67 @@ def try_faster_whisper(audio_filename, model_size, max_caption_size, caption_col
         captions = []
         current_words = []
         current_start = None
+        current_end = None
+        
+        print(f"📝 Processing segments...")
         
         for segment in segments:
             print(f"Segment: {segment.start:.1f}s - {segment.end:.1f}s: {segment.text}")
             
             if hasattr(segment, 'words') and segment.words:
                 # Use word-level timestamps
-                for word in segment.words:
-                    if current_start is None:
-                        current_start = word.start
-                    
-                    current_words.append(word.word.strip())
-                    
-                    # Create caption when we reach max size or end of segment
-                    if len(current_words) >= max_caption_size:
-                        caption_text = ' '.join(current_words).strip()
-                        captions.append(((current_start, word.end), caption_text, caption_color))
-                        current_words = []
-                        current_start = None
+                for word_info in segment.words:
+                    try:
+                        # Handle different word object formats
+                        if hasattr(word_info, 'word'):
+                            word_text = word_info.word.strip()
+                            word_start = float(word_info.start)
+                            word_end = float(word_info.end)
+                        else:
+                            # Alternative format handling
+                            word_text = str(word_info).strip()
+                            word_start = segment.start
+                            word_end = segment.end
+                        
+                        if not word_text:
+                            continue
+                            
+                        if current_start is None:
+                            current_start = word_start
+                        
+                        current_words.append(word_text)
+                        current_end = word_end
+                        
+                        # Create caption when we reach max size
+                        if len(current_words) >= max_caption_size:
+                            caption_text = ' '.join(current_words).strip()
+                            if caption_text:
+                                captions.append(((current_start, current_end), caption_text, caption_color))
+                            current_words = []
+                            current_start = None
+                            current_end = None
+                            
+                    except Exception as e:
+                        print(f"⚠️  Error processing word: {e}")
+                        continue
             else:
-                # Use segment-level timestamps
+                # Use segment-level timestamps as fallback
                 words = segment.text.strip().split()
-                segment_captions = split_segment_into_captions(
-                    words, segment.start, segment.end, max_caption_size, caption_color
-                )
-                captions.extend(segment_captions)
+                if words:
+                    segment_captions = split_segment_into_captions(
+                        words, segment.start, segment.end, max_caption_size, caption_color
+                    )
+                    captions.extend(segment_captions)
         
         # Add remaining words
         if current_words and current_start is not None:
-            # Estimate end time
-            estimated_end = current_start + len(current_words) * 0.5
+            if current_end is None:
+                current_end = current_start + len(current_words) * 0.5
             caption_text = ' '.join(current_words).strip()
-            captions.append(((current_start, estimated_end), caption_text, caption_color))
+            if caption_text:
+                captions.append(((current_start, current_end), caption_text, caption_color))
         
+        print(f"✅ Generated {len(captions)} captions with faster-whisper")
         return captions
         
     except ImportError:
@@ -133,6 +198,8 @@ def try_faster_whisper(audio_filename, model_size, max_caption_size, caption_col
         return []
     except Exception as e:
         print(f"❌ faster-whisper error: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def try_wav2vec2_with_alignment(audio_filename, model_size, max_caption_size, caption_color):
@@ -465,7 +532,22 @@ def convert_to_wav(audio_filename):
 def preview_captions(captions):
     """Preview generated captions"""
     print("📋 Caption preview:")
-    for i, ((start, end), text, color) in enumerate(captions[:3]):
-        print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
+    for i, caption_data in enumerate(captions[:3]):
+        try:
+            if isinstance(caption_data, (tuple, list)) and len(caption_data) >= 2:
+                time_info = caption_data[0]
+                text = caption_data[1]
+                color = caption_data[2] if len(caption_data) > 2 else "white"
+                
+                if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
+                    start, end = time_info[0], time_info[1]
+                    print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
+                else:
+                    print(f"   {i+1}. Invalid time format: {caption_data}")
+            else:
+                print(f"   {i+1}. Invalid caption format: {caption_data}")
+        except Exception as e:
+            print(f"   {i+1}. Error displaying caption: {e}")
+    
     if len(captions) > 3:
         print(f"   ... and {len(captions) - 3} more")
