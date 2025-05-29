@@ -181,8 +181,7 @@ for i, video_data in enumerate(background_video_data):
             import traceback
             traceback.print_exc()
             continue
-    
-  print(f"\n📝 Processing {len(timed_captions)} caption segments...")
+          print(f"\n📝 Processing {len(timed_captions)} caption segments...")
     
     # Process captions with improved styling for mobile viewing
     for i, caption_data in enumerate(timed_captions):
