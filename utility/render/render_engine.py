@@ -64,7 +64,7 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, vid
     
     print(f"📹 Processing {len(background_video_data)} video segments...")
     
-    for i, video_data in enumerate(background_video_data):
+  for i, video_data in enumerate(background_video_data):
     try:
         if isinstance(video_data, (list, tuple)) and len(video_data) >= 2:
             time_info, video_url = video_data[0], video_data[1]
