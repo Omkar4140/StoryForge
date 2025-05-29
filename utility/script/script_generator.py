@@ -40,7 +40,7 @@ def generate_script(topic):
     
     try:
         from groq import Groq
-        model = "llama3-70b-8192"
+        model = "meta-llama/llama-4-scout-17b-16e-instruct"
         client = Groq(api_key=groq_api_key)
         print("✅ Using Groq API for script generation")
     except ImportError:
