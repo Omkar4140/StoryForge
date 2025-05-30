@@ -290,7 +290,7 @@ def getBestVideo(query_string, orientation_portrait=True, used_vids=[]):
     print(f"❌ No suitable video links found for: {query_string}")
     return None
 
-def generate_video_url_fixed(timed_video_searches, video_server, orientation="portrait"):
+def generate_video_url(timed_video_searches, video_server, orientation="portrait"):
     """
     Generate video URLs for timed search queries with enhanced error handling - Fixed version
     """
