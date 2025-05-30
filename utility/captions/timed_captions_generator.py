@@ -124,9 +124,6 @@ def validate_caption_format(captions):
     print(f"✅ Validated {len(validated)} captions out of {len(captions)}")
     return validated
 
-
-
-
 def convert_to_wav(audio_filename):
     """Convert audio file to WAV format if needed"""
     if audio_filename.lower().endswith('.wav'):
@@ -141,26 +138,3 @@ def convert_to_wav(audio_filename):
     except Exception as e:
         print(f"❌ Error converting to WAV: {e}")
         return None
-
-def preview_captions(captions):
-    """Preview generated captions"""
-    print("📋 Caption preview:")
-    for i, caption_data in enumerate(captions[:3]):
-        try:
-            if isinstance(caption_data, (tuple, list)) and len(caption_data) >= 2:
-                time_info = caption_data[0]
-                text = caption_data[1]
-                color = caption_data[2] if len(caption_data) > 2 else "white"
-                
-                if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
-                    start, end = time_info[0], time_info[1]
-                    print(f"   {i+1}. [{start:.1f}s - {end:.1f}s] ({color}): {text}")
-                else:
-                    print(f"   {i+1}. Invalid time format: {caption_data}")
-            else:
-                print(f"   {i+1}. Invalid caption format: {caption_data}")
-        except Exception as e:
-            print(f"   {i+1}. Error displaying caption: {e}")
-    
-    if len(captions) > 3:
-        print(f"   ... and {len(captions) - 3} more")
