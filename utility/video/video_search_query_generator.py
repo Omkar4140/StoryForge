@@ -62,7 +62,7 @@ Format: [[[t1, t2], ["topic-keyword1", "topic-keyword2", "topic-keyword3"]], [[t
 
 def safe_unpack(data, expected_count, default_values=None):
     """
-    Safely unpack data with fallback to defaults
+    Safely unpack data with fallback to defaults - Enhanced version
     
     Args:
         data: Data to unpack (tuple, list, etc.)
@@ -73,6 +73,13 @@ def safe_unpack(data, expected_count, default_values=None):
         tuple: Unpacked values or defaults
     """
     try:
+        if data is None:
+            print("Warning: Data is None, using defaults")
+            if default_values and len(default_values) == expected_count:
+                return tuple(default_values)
+            else:
+                return tuple([None] * expected_count)
+        
         if isinstance(data, (tuple, list)):
             if len(data) == expected_count:
                 return tuple(data)
@@ -90,7 +97,7 @@ def safe_unpack(data, expected_count, default_values=None):
                     result = list(data) + [None] * (expected_count - len(data))
                     return tuple(result)
         else:
-            print(f"Data is not iterable: {type(data)}")
+            print(f"Data is not iterable: {type(data)} - {data}")
             if default_values and len(default_values) == expected_count:
                 return tuple(default_values)
             else:
