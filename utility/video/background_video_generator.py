@@ -69,34 +69,49 @@ def normalize_data_format(data):
         if isinstance(data, (tuple, list)):
             if len(data) == 2:
                 # Check if first element is time info
-                first, second = data
+                first, second = safe_unpack(data, 2, [None, None])
                 
                 # Format: ((start, end), content) - already correct
-                if isinstance(first, (tuple, list)) and len(first) == 2:
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
                     try:
                         # Verify times are numeric
                         float(first[0])
                         float(first[1])
                         return ((float(first[0]), float(first[1])), second)
-                    except (ValueError, TypeError):
-                        pass
-                
-                # Format: ([start, end], content)
-                if isinstance(first, list) and len(first) == 2:
-                    try:
-                        float(first[0])
-                        float(first[1])
-                        return ((float(first[0]), float(first[1])), second)
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, IndexError):
                         pass
                         
             elif len(data) == 3:
+                # Could be: (start, end, content) OR ((start, end), content, extra)
+                first, second, third = safe_unpack(data, 3, [None, None, None])
+                
+                # Check if first element is time tuple
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        # Format: ((start, end), content, extra)
+                        return ((float(first[0]), float(first[1])), second)
+                    except (ValueError, TypeError, IndexError):
+                        pass
+                
                 # Format: (start, end, content)
                 try:
-                    start, end, content = data
-                    return ((float(start), float(end)), content)
+                    return ((float(first), float(second)), third)
                 except (ValueError, TypeError):
                     pass
+                    
+            elif len(data) > 3:
+                # Handle cases with more than 3 elements
+                print(f"Warning: Data has {len(data)} elements, trying to extract time and content")
+                first = data[0]
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        return ((float(first[0]), float(first[1])), data[1])
+                    except (ValueError, TypeError, IndexError):
+                        pass
         
         print(f"Warning: Could not normalize data format: {data}")
         return None
@@ -306,15 +321,25 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                     timed_video_urls.append(((-1, -1), None))
                     continue
                 
-                time_info, search_terms = normalized
+                # Use safe_unpack to avoid unpacking errors
+                time_info, search_terms = safe_unpack(normalized, 2, [(-1, -1), None])
                 print(f"Normalized time info: {time_info}")
                 print(f"Normalized search terms: {search_terms}")
                 
                 # Validate search terms
-                if not isinstance(search_terms, list):
-                    print(f"❌ Warning: Search terms should be list, got {type(search_terms)} at index {i}")
+                if search_terms is None:
+                    print(f"❌ Warning: Search terms is None at index {i}")
                     timed_video_urls.append((time_info, None))
                     continue
+                    
+                if not isinstance(search_terms, list):
+                    # Try to convert to list if it's a single string
+                    if isinstance(search_terms, str):
+                        search_terms = [search_terms]
+                    else:
+                        print(f"❌ Warning: Search terms should be list, got {type(search_terms)} at index {i}")
+                        timed_video_urls.append((time_info, None))
+                        continue
                     
                 if len(search_terms) == 0:
                     print(f"❌ Warning: Empty search terms at index {i}")
@@ -436,7 +461,8 @@ def merge_empty_intervals(segments):
                 i += 1
                 continue
             
-            time_info, url = normalized
+            # Use safe_unpack to avoid unpacking errors
+            time_info, url = safe_unpack(normalized, 2, [(-1, -1), None])
             print(f"Normalized: time_info={time_info}, url={url}")
             
             if url is None:
@@ -450,7 +476,7 @@ def merge_empty_intervals(segments):
                     if next_normalized is None:
                         break
                     
-                    next_time_info, next_url = next_normalized
+                    next_time_info, next_url = safe_unpack(next_normalized, 2, [(-1, -1), None])
                     if next_url is not None:
                         break
                     
@@ -459,7 +485,9 @@ def merge_empty_intervals(segments):
                 
                 # Merge consecutive None intervals with the previous valid URL
                 if i > 0 and len(merged) > 0:
-                    prev_time_info, prev_url = merged[-1]
+                    prev_entry = merged[-1]
+                    prev_time_info, prev_url = safe_unpack(prev_entry, 2, [(-1, -1), None])
+                    
                     if prev_url is not None:
                         # Extend the previous segment to cover all None intervals
                         extended_time = (prev_time_info[0], last_time_info[1])
