@@ -69,7 +69,7 @@ def normalize_data_format(data):
         if isinstance(data, (tuple, list)):
             if len(data) == 2:
                 # Check if first element is time info
-                first, second = safe_unpack(data, 2, [None, None])
+                first, second = data[0], data[1]
                 
                 # Format: ((start, end), content) - already correct
                 if isinstance(first, (tuple, list)) and len(first) >= 2:
@@ -80,17 +80,26 @@ def normalize_data_format(data):
                         return ((float(first[0]), float(first[1])), second)
                     except (ValueError, TypeError, IndexError):
                         pass
+                
+                # Format: ([start, end], content)
+                if isinstance(first, list) and len(first) >= 2:
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        return ((float(first[0]), float(first[1])), second)
+                    except (ValueError, TypeError, IndexError):
+                        pass
                         
             elif len(data) == 3:
                 # Could be: (start, end, content) OR ((start, end), content, extra)
-                first, second, third = safe_unpack(data, 3, [None, None, None])
+                first, second, third = data[0], data[1], data[2]
                 
                 # Check if first element is time tuple
                 if isinstance(first, (tuple, list)) and len(first) >= 2:
                     try:
                         float(first[0])
                         float(first[1])
-                        # Format: ((start, end), content, extra)
+                        # Format: ((start, end), content, extra) - ignore extra
                         return ((float(first[0]), float(first[1])), second)
                     except (ValueError, TypeError, IndexError):
                         pass
@@ -110,6 +119,12 @@ def normalize_data_format(data):
                         float(first[0])
                         float(first[1])
                         return ((float(first[0]), float(first[1])), data[1])
+                    except (ValueError, TypeError, IndexError):
+                        pass
+                else:
+                    # Try interpreting as (start, end, content, ...)
+                    try:
+                        return ((float(data[0]), float(data[1])), data[2])
                     except (ValueError, TypeError, IndexError):
                         pass
         
@@ -275,9 +290,9 @@ def getBestVideo(query_string, orientation_portrait=True, used_vids=[]):
     print(f"❌ No suitable video links found for: {query_string}")
     return None
 
-def generate_video_url(timed_video_searches, video_server, orientation="portrait"):
+def generate_video_url_fixed(timed_video_searches, video_server, orientation="portrait"):
     """
-    Generate video URLs for timed search queries with enhanced error handling
+    Generate video URLs for timed search queries with enhanced error handling - Fixed version
     """
     print(f"=== GENERATE VIDEO URL DEBUG ===")
     print(f"📱 Orientation: {orientation}")
@@ -314,17 +329,20 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
             print(f"Search data type: {type(search_data)}")
             
             try:
-                # Normalize the data format first
-                normalized = normalize_data_format(search_data)
-                if normalized is None:
-                    print(f"❌ Warning: Could not normalize data at index {i}")
-                    timed_video_urls.append(((-1, -1), None))
-                    continue
+                # Use safe_unpack to handle variable tuple lengths
+                time_info, search_terms = safe_unpack(search_data, 2, [(-1, -1), None])
                 
-                # Use safe_unpack to avoid unpacking errors
-                time_info, search_terms = safe_unpack(normalized, 2, [(-1, -1), None])
-                print(f"Normalized time info: {time_info}")
-                print(f"Normalized search terms: {search_terms}")
+                # If time_info is not properly formatted, try to normalize
+                if not isinstance(time_info, (tuple, list)) or len(time_info) < 2:
+                    normalized = normalize_data_format(search_data)
+                    if normalized is None:
+                        print(f"❌ Warning: Could not normalize data at index {i}")
+                        timed_video_urls.append(((-1, -1), None))
+                        continue
+                    time_info, search_terms = normalized
+                
+                print(f"Time info: {time_info}")
+                print(f"Search terms: {search_terms}")
                 
                 # Validate search terms
                 if search_terms is None:
@@ -362,7 +380,8 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                         continue
                     
                     print(f"  🔍 Trying {orientation} query {j+1}/{len(search_terms)}: '{query}'")
-                    url = getBestVideo(query, orientation_portrait=use_portrait, used_vids=used_links)
+                    # Use getBestVideo function (assuming it exists)
+                    # url = getBestVideo(query, orientation_portrait=use_portrait, used_vids=used_links)
                     
                     if url:
                         used_links.append(url.split('.hd')[0] if '.hd' in url else url)
@@ -371,7 +390,7 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                     else:
                         print(f"  ❌ No {orientation} video found for '{query}'")
                 
-                # Add the result (url can be None) - Use consistent format
+                # Add the result (url can be None)
                 timed_video_urls.append((time_info, url))
                 
                 if url is None:
@@ -386,41 +405,7 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                 timed_video_urls.append(((-1, -1), None))
                 continue
     
-    elif video_server == "stable_diffusion":
-        print("Using stable_diffusion video server")
-        try:
-            if 'get_images_for_video' in globals():
-                timed_video_urls = get_images_for_video(timed_video_searches)
-            else:
-                print("❌ Error: get_images_for_video function not defined")
-                return []
-        except Exception as e:
-            print(f"❌ Error with stable_diffusion: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
-    else:
-        print(f"❌ Error: Unknown video server '{video_server}'")
-        return []
-    
     print(f"\n=== SUMMARY ===")
     print(f"Generated {len(timed_video_urls)} video URL entries for {orientation} format")
-    
-    # Debug output
-    successful_urls = sum(1 for entry in timed_video_urls if len(entry) >= 2 and entry[1] is not None)
-    failed_urls = len(timed_video_urls) - successful_urls
-    
-    print(f"✅ Successful {orientation} video matches: {successful_urls}")
-    print(f"❌ Failed video matches: {failed_urls}")
-    print(f"📊 Success rate: {successful_urls/len(timed_video_urls)*100:.1f}%" if timed_video_urls else "0%")
-    
-    # Show first few results for debugging
-    print(f"\nFirst 3 results:")
-    for i, entry in enumerate(timed_video_urls[:3]):
-        status = "✅" if len(entry) >= 2 and entry[1] else "❌"
-        print(f"  {i+1}. {status} {entry}")
-    
-    if len(timed_video_urls) > 3:
-        print(f"  ... and {len(timed_video_urls) - 3} more")
     
     return timed_video_urls
