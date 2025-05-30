@@ -1,5 +1,3 @@
-# Fixed utility/render/render_engine.py
-
 import os
 import tempfile
 import requests
@@ -40,12 +38,23 @@ def normalize_data_format(data):
                         pass
                         
             elif len(data) == 3:
-                # Format: (start, end, content)
-                try:
-                    start, end, content = data
-                    return ((float(start), float(end)), content)
-                except (ValueError, TypeError):
-                    pass
+                # Format: (start, end, content) OR ((start, end), content, extra)
+                first = data[0]
+                if isinstance(first, (tuple, list)) and len(first) == 2:
+                    # Format: ((start, end), content, extra) - caption with color
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        return ((float(first[0]), float(first[1])), data[1])
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    # Format: (start, end, content)
+                    try:
+                        start, end, content = data
+                        return ((float(start), float(end)), content)
+                    except (ValueError, TypeError):
+                        pass
         
         print(f"Warning: Could not normalize data format: {data}")
         return None
@@ -154,33 +163,53 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
             print(f"Raw caption data: {caption_data}")
             print(f"Data type: {type(caption_data)}")
             
-            # Handle different caption formats
+            # Initialize variables
+            time_info = None
+            text = ""
+            color = "white"
+            
+            # Handle different caption formats more carefully
             if isinstance(caption_data, (tuple, list)):
-                if len(caption_data) >= 3:
-                    # Format: ((start, end), text, color) or ([start, end], text, color)
-                    time_info, text, color = caption_data[0], caption_data[1], caption_data[2]
-                elif len(caption_data) == 2:
-                    # Format: ((start, end), text) or ([start, end], text)
-                    time_info, text = caption_data
-                    color = "white"  # default color
-                else:
-                    print(f"❌ Warning: Invalid caption format at index {i}: {caption_data}")
-                    continue
+                data_len = len(caption_data)
+                
+                if data_len >= 2:
+                    # Get the first element (should be time info)
+                    potential_time_info = caption_data[0]
                     
-                # Normalize time info
-                if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
-                    try:
-                        start_time = float(time_info[0])
-                        end_time = float(time_info[1])
-                    except (ValueError, TypeError):
-                        print(f"❌ Warning: Invalid time values at index {i}: {time_info}")
+                    # Check if first element is time info
+                    if isinstance(potential_time_info, (tuple, list)) and len(potential_time_info) >= 2:
+                        try:
+                            # Verify it's actually time data
+                            float(potential_time_info[0])
+                            float(potential_time_info[1])
+                            time_info = potential_time_info
+                            text = caption_data[1]
+                            if data_len >= 3:
+                                color = caption_data[2]
+                        except (ValueError, TypeError):
+                            print(f"❌ Warning: First element not valid time info at index {i}")
+                            continue
+                    else:
+                        print(f"❌ Warning: Expected time info as first element at index {i}")
                         continue
                 else:
-                    print(f"❌ Warning: Invalid time info at index {i}: {time_info}")
+                    print(f"❌ Warning: Caption data too short at index {i}: {caption_data}")
                     continue
                     
             else:
                 print(f"❌ Warning: Caption data should be tuple/list at index {i}: {caption_data}")
+                continue
+            
+            # Validate time info
+            if time_info is None or len(time_info) < 2:
+                print(f"❌ Warning: Invalid time info at index {i}: {time_info}")
+                continue
+                
+            try:
+                start_time = float(time_info[0])
+                end_time = float(time_info[1])
+            except (ValueError, TypeError):
+                print(f"❌ Warning: Invalid time values at index {i}: {time_info}")
                 continue
             
             duration = end_time - start_time
@@ -188,6 +217,10 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
             
             if not text_str:
                 print(f"⚠️ Skipping empty caption at index {i}")
+                continue
+                
+            if duration <= 0:
+                print(f"⚠️ Skipping caption with invalid duration at index {i}: {duration}")
                 continue
             
             print(f"Caption {i+1}: {start_time:.1f}s - {end_time:.1f}s: '{text_str[:30]}...'")
