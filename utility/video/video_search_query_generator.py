@@ -114,6 +114,9 @@ def clean_json_response(response_text):
     """
     Removes extra text from API responses and extracts only the valid JSON portion.
     """
+    if not response_text:
+        return None
+        
     # Remove common markdown formatting
     response_text = response_text.replace("```json", "").replace("```", "").strip()
     
@@ -124,7 +127,7 @@ def clean_json_response(response_text):
     if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
         return response_text[json_start_index:json_end_index+1]
     
-    return None
+    return response_text
 
 def fix_json(json_str):
     """
@@ -160,66 +163,141 @@ def fix_json(json_str):
 
 def advanced_json_parse(content):
     """
-    Advanced JSON parsing with multiple fallback methods
+    Advanced JSON parsing with multiple fallback methods - IMPROVED VERSION
     """
     if not content or not content.strip():
+        print("❌ Empty content provided to JSON parser")
         return None
+    
+    print(f"🔍 Attempting to parse JSON content (length: {len(content)})")
+    print(f"📝 Content preview: {content[:200]}...")
     
     # Method 1: Direct parsing
     try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        pass
+        result = json.loads(content)
+        print("✅ Method 1: Direct JSON parsing successful")
+        return result
+    except json.JSONDecodeError as e:
+        print(f"❌ Method 1 failed: {e}")
     
     # Method 2: Clean and parse
     try:
         cleaned = clean_json_response(content)
         if cleaned:
-            return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
+            result = json.loads(cleaned)
+            print("✅ Method 2: Cleaned JSON parsing successful")
+            return result
+    except json.JSONDecodeError as e:
+        print(f"❌ Method 2 failed: {e}")
     
     # Method 3: Fix common issues and parse
     try:
         fixed = fix_json(content)
-        return json.loads(fixed)
-    except json.JSONDecodeError:
-        pass
+        result = json.loads(fixed)
+        print("✅ Method 3: Fixed JSON parsing successful")
+        return result
+    except json.JSONDecodeError as e:
+        print(f"❌ Method 3 failed: {e}")
     
-    # Method 4: Extract JSON with regex
+    # Method 4: Extract JSON with regex - IMPROVED
     try:
-        # Look for array patterns
-        json_pattern = r'\[\s*\[.*?\]\s*\]'
+        # Look for array patterns - more flexible regex
+        json_pattern = r'\[(?:\s*\[.*?\]\s*,?\s*)*\]'
         matches = re.findall(json_pattern, content, re.DOTALL)
         if matches:
-            for match in matches:
+            print(f"🔍 Found {len(matches)} potential JSON arrays")
+            for i, match in enumerate(matches):
                 try:
-                    return json.loads(match)
-                except:
+                    result = json.loads(match)
+                    print(f"✅ Method 4: Regex extraction successful (match {i+1})")
+                    return result
+                except json.JSONDecodeError:
                     continue
-    except:
-        pass
+    except Exception as e:
+        print(f"❌ Method 4 failed: {e}")
     
-    # Method 5: Try to construct valid JSON from content
+    # Method 5: Manual reconstruction - ENHANCED
     try:
-        # Look for time segments and keywords pattern
-        segment_pattern = r'\[\[(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\],\s*\[(.*?)\]\]'
+        print("🔧 Attempting manual JSON reconstruction...")
+        
+        # Look for time segments and keywords pattern with more flexible matching
+        # This regex is more permissive and handles various formatting
+        segment_pattern = r'\[\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\s*,\s*\[\s*([^\]]+)\s*\]\s*\]'
         segments = re.findall(segment_pattern, content, re.DOTALL)
+        
+        print(f"🔍 Found {len(segments)} time segments using regex")
         
         if segments:
             result = []
-            for start_time, end_time, keywords_str in segments:
-                # Extract keywords
-                keywords = re.findall(r'"([^"]*)"', keywords_str)
+            for i, (start_time, end_time, keywords_str) in enumerate(segments):
+                print(f"Processing segment {i+1}: [{start_time}, {end_time}] with keywords: {keywords_str[:50]}...")
+                
+                # Extract keywords with better handling
+                keywords = []
+                
+                # Try different quote patterns
+                quote_patterns = [
+                    r'"([^"]*)"',  # Double quotes
+                    r"'([^']*)'",  # Single quotes
+                    r'["\']([^"\']*)["\']'  # Mixed quotes
+                ]
+                
+                for pattern in quote_patterns:
+                    keywords = re.findall(pattern, keywords_str)
+                    if keywords:
+                        break
+                
+                # If no quotes found, try splitting by commas
+                if not keywords:
+                    keywords = [k.strip().strip('"\'') for k in keywords_str.split(',')]
+                    keywords = [k for k in keywords if k]  # Remove empty strings
+                
+                # Limit to 3 keywords and ensure they're not empty
+                keywords = [k.strip() for k in keywords if k.strip()][:3]
+                
                 if keywords:
-                    result.append([[float(start_time), float(end_time)], keywords[:3]])  # Limit to 3 keywords
+                    result.append([[float(start_time), float(end_time)], keywords])
+                    print(f"✅ Added segment: [{start_time}, {end_time}] with {len(keywords)} keywords")
+                else:
+                    print(f"⚠️ No valid keywords found for segment [{start_time}, {end_time}]")
             
             if result:
+                print(f"✅ Method 5: Manual reconstruction successful with {len(result)} segments")
                 return result
-    except:
-        pass
+    except Exception as e:
+        print(f"❌ Method 5 failed: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print(f"Failed to parse JSON: {content[:200]}...")
+    # Method 6: Try to extract just the array content and rebuild
+    try:
+        print("🔧 Attempting content extraction and rebuild...")
+        
+        # Find all [time, keywords] patterns
+        time_keyword_pattern = r'\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\s*,\s*\[([^\]]+)\]'
+        matches = re.findall(time_keyword_pattern, content)
+        
+        if matches:
+            result = []
+            for start_time, end_time, keywords_str in matches:
+                # Extract keywords
+                keywords = re.findall(r'["\']([^"\']+)["\']', keywords_str)
+                if not keywords:
+                    # Fallback: split by comma and clean
+                    keywords = [k.strip().strip('"\'') for k in keywords_str.split(',')]
+                    keywords = [k for k in keywords if k.strip()]
+                
+                keywords = keywords[:3]  # Limit to 3
+                if keywords:
+                    result.append([[float(start_time), float(end_time)], keywords])
+            
+            if result:
+                print(f"✅ Method 6: Content extraction successful with {len(result)} segments")
+                return result
+    except Exception as e:
+        print(f"❌ Method 6 failed: {e}")
+    
+    print(f"❌ All JSON parsing methods failed. Content: {content}")
     return None
 
 def getVideoSearchQueriesTimed(script, captions_timed):
@@ -227,80 +305,156 @@ def getVideoSearchQueriesTimed(script, captions_timed):
     Get video search queries with improved error handling and retry logic
     """
     if not captions_timed:
-        print("Warning: No captions provided")
+        print("❌ Warning: No captions provided")
         return None
     
-    end_time = captions_timed[-1][0][1]
+    print(f"🎯 Processing {len(captions_timed)} caption segments")
+    
+    # Get the end time for validation
+    try:
+        last_caption = captions_timed[-1]
+        if isinstance(last_caption, (list, tuple)) and len(last_caption) >= 1:
+            time_info = last_caption[0]
+            if isinstance(time_info, (list, tuple)) and len(time_info) >= 2:
+                end_time = float(time_info[1])
+            else:
+                end_time = 60.0  # Default fallback
+        else:
+            end_time = 60.0  # Default fallback
+    except Exception as e:
+        print(f"⚠️ Could not determine end time: {e}")
+        end_time = 60.0
+    
+    print(f"📊 Expected end time: {end_time}")
+    
     max_retries = 3
     
     for attempt in range(max_retries):
         try:
-            print(f"Attempt {attempt + 1}/{max_retries}")
+            print(f"🚀 Attempt {attempt + 1}/{max_retries}")
             
             # Call the API
             raw_response = call_OpenAI(script, captions_timed)
             
             if not raw_response or not raw_response.strip():
-                print("Empty response from API")
+                print("❌ Empty response from API")
                 continue
+            
+            print(f"📨 Received response length: {len(raw_response)}")
             
             # Parse the response
             parsed_result = advanced_json_parse(raw_response)
             
             if parsed_result is None:
-                print(f"Failed to parse JSON on attempt {attempt + 1}")
+                print(f"❌ Failed to parse JSON on attempt {attempt + 1}")
                 if attempt < max_retries - 1:
-                    print("Retrying...")
+                    print("🔄 Retrying...")
                     continue
                 else:
-                    print("Max retries reached, returning None")
+                    print("❌ Max retries reached, returning None")
                     return None
             
             # Validate the result
             if not isinstance(parsed_result, list):
-                print("Result is not a list")
+                print(f"❌ Result is not a list: {type(parsed_result)}")
                 continue
             
             # Check if we have valid time segments
             if len(parsed_result) == 0:
-                print("Empty result list")
+                print("❌ Empty result list")
                 continue
             
-            # Validate time coverage
-            if len(parsed_result) > 0:
-                last_segment = parsed_result[-1]
-                if isinstance(last_segment, list) and len(last_segment) >= 2:
-                    if isinstance(last_segment[0], list) and len(last_segment[0]) >= 2:
-                        if abs(last_segment[0][1] - end_time) <= 1.0:  # Allow 1 second tolerance
-                            print("✅ Successfully parsed video search queries")
-                            return parsed_result
+            print(f"✅ Parsed {len(parsed_result)} segments successfully")
             
-            print(f"Time coverage validation failed. Expected end: {end_time}")
+            # Validate structure
+            valid_segments = 0
+            for i, segment in enumerate(parsed_result):
+                if isinstance(segment, list) and len(segment) >= 2:
+                    time_info, keywords = segment[0], segment[1]
+                    if (isinstance(time_info, list) and len(time_info) >= 2 and
+                        isinstance(keywords, list) and len(keywords) > 0):
+                        valid_segments += 1
+                    else:
+                        print(f"⚠️ Invalid segment structure at index {i}: {segment}")
+                else:
+                    print(f"⚠️ Invalid segment at index {i}: {segment}")
+            
+            print(f"✅ Found {valid_segments}/{len(parsed_result)} valid segments")
+            
+            if valid_segments > 0:
+                # Validate time coverage (more lenient)
+                try:
+                    last_segment = parsed_result[-1]
+                    if isinstance(last_segment, list) and len(last_segment) >= 2:
+                        if isinstance(last_segment[0], list) and len(last_segment[0]) >= 2:
+                            actual_end = float(last_segment[0][1])
+                            time_diff = abs(actual_end - end_time)
+                            print(f"📊 Time coverage: Expected {end_time}, Got {actual_end}, Diff: {time_diff}")
+                            
+                            if time_diff <= 2.0:  # Allow 2 second tolerance
+                                print("✅ Time coverage validation passed")
+                                return parsed_result
+                            else:
+                                print(f"⚠️ Time coverage validation failed (diff: {time_diff}s)")
+                                # Still return the result if we have valid segments
+                                if valid_segments >= len(captions_timed) * 0.8:  # At least 80% coverage
+                                    print("✅ Accepting result due to sufficient segment coverage")
+                                    return parsed_result
+                except Exception as e:
+                    print(f"⚠️ Time validation error: {e}")
+                    # If we have valid segments, return them anyway
+                    if valid_segments > 0:
+                        print("✅ Returning result despite time validation error")
+                        return parsed_result
+            
             if attempt < max_retries - 1:
+                print("🔄 Retrying due to validation issues...")
                 continue
+            else:
+                # Last attempt - return what we have if it's somewhat valid
+                if valid_segments > 0:
+                    print("⚠️ Returning partial result on final attempt")
+                    return parsed_result
             
         except Exception as e:
-            print(f"Error in getVideoSearchQueriesTimed (attempt {attempt + 1}): {e}")
+            print(f"❌ Error in getVideoSearchQueriesTimed (attempt {attempt + 1}): {e}")
+            import traceback
+            traceback.print_exc()
             if attempt < max_retries - 1:
                 continue
     
-    print("Failed to get valid video search queries after all attempts")
+    print("❌ Failed to get valid video search queries after all attempts")
     return None
 
 def call_OpenAI(script, captions_timed):
     """
     Call the API with improved formatting and error handling
     """
-    user_content = f"""Script: {script}
-Timed Captions: {captions_timed}"""
+    # Create more concise input to avoid token limits
+    captions_summary = []
+    for caption in captions_timed[:10]:  # Limit to first 10 for context
+        try:
+            time_info, text = safe_unpack(caption, 2, [[-1, -1], ""])
+            if isinstance(time_info, (list, tuple)) and len(time_info) >= 2:
+                captions_summary.append(f"[{time_info[0]:.1f}-{time_info[1]:.1f}]: {text[:50]}")
+        except:
+            continue
+    
+    user_content = f"""Script: {script[:1000]}...
+
+Timed Captions (sample): {'; '.join(captions_summary)}
+
+Total caption segments: {len(captions_timed)}
+
+Please generate video search queries for ALL {len(captions_timed)} segments."""
     
     try:
-        print("Calling API...")
+        print("📞 Calling API...")
         
         response = client.chat.completions.create(
             model=model,
-            temperature=0.7,  # Reduced temperature for more consistent output
-            max_tokens=2000,  # Increased token limit
+            temperature=0.5,  # Reduced for more consistent output
+            max_tokens=3000,  # Increased token limit
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_content}
@@ -308,20 +462,22 @@ Timed Captions: {captions_timed}"""
         )
         
         text = response.choices[0].message.content.strip()
-        text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
         
-        print(f"API Response (first 200 chars): {text[:200]}...")
+        print(f"📨 API Response length: {len(text)}")
+        print(f"📝 Response preview: {text[:300]}...")
         
         # Log the response
         try:
-            log_response(LOG_TYPE_GPT, script, text)
+            log_response(LOG_TYPE_GPT, script[:200], text)
         except Exception as log_error:
-            print(f"Warning: Failed to log response: {log_error}")
+            print(f"⚠️ Failed to log response: {log_error}")
         
         return text
         
     except Exception as e:
-        print(f"Error calling API: {e}")
+        print(f"❌ Error calling API: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def merge_empty_intervals(segments):
@@ -329,24 +485,26 @@ def merge_empty_intervals(segments):
     Merge empty intervals with improved error handling using safe_unpack
     """
     if segments is None:
-        print("Warning: Received None for segments, returning empty list.")
+        print("⚠️ Warning: Received None for segments, returning empty list.")
         return []
     
     if not isinstance(segments, list):
-        print("Warning: Segments is not a list, returning empty list.")
+        print("⚠️ Warning: Segments is not a list, returning empty list.")
         return []
     
     if len(segments) == 0:
-        print("Warning: Empty segments list.")
+        print("⚠️ Warning: Empty segments list.")
         return []
+    
+    print(f"🔗 Merging intervals for {len(segments)} segments")
     
     merged = []
     i = 0
     while i < len(segments):
         try:
             # Safely check segment structure
-            if not isinstance(segments[i], list):
-                print(f"Warning: Segment at index {i} is not a list: {segments[i]}")
+            if not isinstance(segments[i], (list, tuple)):
+                print(f"⚠️ Warning: Segment at index {i} is not a list/tuple: {segments[i]}")
                 i += 1
                 continue
             
@@ -357,7 +515,7 @@ def merge_empty_intervals(segments):
                 # Find consecutive None intervals
                 j = i + 1
                 while j < len(segments):
-                    if not isinstance(segments[j], list) or len(segments[j]) < 2:
+                    if not isinstance(segments[j], (list, tuple)):
                         break
                     
                     next_interval, next_url = safe_unpack(segments[j], 2, default_values=[[-1, -1], None])
@@ -371,26 +529,30 @@ def merge_empty_intervals(segments):
                     if (prev_url is not None and 
                         len(prev_interval) >= 2 and 
                         len(interval) >= 2 and 
-                        prev_interval[1] == interval[0]):
+                        abs(prev_interval[1] - interval[0]) <= 0.1):  # Allow small time gaps
                         
                         # Get the last interval's end time
                         last_end_time = interval[1]
                         if j - 1 < len(segments):
                             last_segment = segments[j-1]
-                            if isinstance(last_segment, list) and len(last_segment) >= 1:
+                            if isinstance(last_segment, (list, tuple)):
                                 last_interval, _ = safe_unpack(last_segment, 2, default_values=[[-1, -1], None])
                                 if len(last_interval) >= 2:
                                     last_end_time = last_interval[1]
                         
                         merged[-1] = [[prev_interval[0], last_end_time], prev_url]
+                        print(f"🔗 Extended previous segment to cover empty intervals")
                     else:
                         merged.append([interval, prev_url if len(merged) > 0 else None])
+                        print(f"➕ Added segment with fallback URL")
                 else:
                     merged.append([interval, None])
+                    print(f"➕ Added segment with no URL (first segment)")
                 
                 i = j
             else:
                 merged.append([interval, url])
+                print(f"➕ Added segment with URL")
                 i += 1
                 
         except Exception as e:
@@ -398,4 +560,5 @@ def merge_empty_intervals(segments):
             print(f"Segment data: {segments[i] if i < len(segments) else 'Index out of range'}")
             i += 1
     
+    print(f"✅ Merged into {len(merged)} final segments")
     return merged
