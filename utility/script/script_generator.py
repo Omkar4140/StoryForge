@@ -54,7 +54,7 @@ def generate_script(topic):
     prompt = f"""You are an expert storyteller for StoryForge, specializing in creating captivating short-form video narratives.
 
 Create a compelling story script that is:
-- 45-60 seconds when narrated (approximately 120-160 words)
+- 35-50 seconds when narrated (approximately 90-100 words)
 - Emotionally engaging with a clear narrative arc
 - Visually rich and perfect for video storytelling
 - Complete with beginning, middle, and satisfying conclusion
