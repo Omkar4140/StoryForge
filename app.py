@@ -178,10 +178,10 @@ def main():
         if background_video_urls:
     # Pass orientation parameter to ensure portrait rendering
             output_video = get_output_media(
-                audio_file=args.audio_file, 
+                audio_file=args.audio-file, 
                 timed_captions=timed_captions, 
                 background_video_data=background_video_urls, 
-                video_server=args.video_server,
+                video_server=args.video-server,
                 orientation=args.orientation  # Add this line
             )
             if output_video:
