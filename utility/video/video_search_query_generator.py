@@ -113,6 +113,7 @@ def safe_unpack(data, expected_count, default_values=None):
 def clean_json_response(response_text):
     """
     Removes extra text from API responses and extracts only the valid JSON portion.
+    Enhanced to handle the specific format from your API.
     """
     if not response_text:
         return None
@@ -120,7 +121,30 @@ def clean_json_response(response_text):
     # Remove common markdown formatting
     response_text = response_text.replace("```json", "").replace("```", "").strip()
     
-    # Find the first [ and last ]
+    # Remove any explanatory text before or after the JSON
+    # Look for the pattern that starts with [[ and ends with ]]
+    lines = response_text.split('\n')
+    json_lines = []
+    in_json = False
+    
+    for line in lines:
+        line = line.strip()
+        if line.startswith('[[') or in_json:
+            in_json = True
+            json_lines.append(line)
+            if line.endswith(']]') and not line.endswith(',]]'):
+                break
+    
+    if json_lines:
+        json_text = '\n'.join(json_lines)
+        # Ensure proper array wrapping
+        if not json_text.startswith('['):
+            json_text = '[' + json_text
+        if not json_text.endswith(']'):
+            json_text = json_text + ']'
+        return json_text
+    
+    # Fallback: find the first [ and last ]
     json_start_index = response_text.find("[")
     json_end_index = response_text.rfind("]")
     
@@ -131,7 +155,7 @@ def clean_json_response(response_text):
 
 def fix_json(json_str):
     """
-    Fixes common JSON formatting issues such as incorrect quotes or escape characters.
+    Fixes common JSON formatting issues - Enhanced for your specific format.
     """
     if not json_str:
         return json_str
@@ -147,23 +171,29 @@ def fix_json(json_str):
     # Remove markdown formatting
     json_str = json_str.replace("```json", "").replace("```", "").strip()
     
-    # Fix missing commas between array elements
-    json_str = re.sub(r'\]\s*\[', '], [', json_str)
+    # Fix the specific pattern from your logs
+    # Convert the comma-separated array format to proper JSON array
+    if not json_str.startswith('[') or not json_str.endswith(']'):
+        # Split by lines and reconstruct
+        segments = []
+        lines = json_str.strip().split('\n')
+        
+        for line in lines:
+            line = line.strip().rstrip(',')
+            if line.startswith('[[') and line.endswith(']]'):
+                segments.append(line)
+        
+        if segments:
+            json_str = '[' + ',\n'.join(segments) + ']'
     
-    # Fix missing commas between object elements
-    json_str = re.sub(r'}\s*{', '}, {', json_str)
+    # Ensure proper commas between segments
+    json_str = re.sub(r'\]\],\s*\[\[', ']],\n[[', json_str)
     
-    # Ensure proper brackets
-    if not json_str.startswith("["):
-        json_str = "[" + json_str
-    if not json_str.endswith("]"):
-        json_str = json_str + "]"
-
     return json_str
 
 def advanced_json_parse(content):
     """
-    Advanced JSON parsing with multiple fallback methods - IMPROVED VERSION
+    Advanced JSON parsing specifically designed for your API response format
     """
     if not content or not content.strip():
         print("❌ Empty content provided to JSON parser")
@@ -172,10 +202,16 @@ def advanced_json_parse(content):
     print(f"🔍 Attempting to parse JSON content (length: {len(content)})")
     print(f"📝 Content preview: {content[:200]}...")
     
-    # Method 1: Direct parsing
+    # Method 1: Parse as-is (the content might already be valid JSON)
     try:
-        result = json.loads(content)
-        print("✅ Method 1: Direct JSON parsing successful")
+        # The API response appears to be already in the correct format, just add brackets
+        if not content.strip().startswith('['):
+            content_wrapped = '[' + content.strip() + ']'
+        else:
+            content_wrapped = content.strip()
+        
+        result = json.loads(content_wrapped)
+        print("✅ Method 1: Direct parsing with wrapping successful")
         return result
     except json.JSONDecodeError as e:
         print(f"❌ Method 1 failed: {e}")
@@ -190,7 +226,7 @@ def advanced_json_parse(content):
     except json.JSONDecodeError as e:
         print(f"❌ Method 2 failed: {e}")
     
-    # Method 3: Fix common issues and parse
+    # Method 3: Fix and parse
     try:
         fixed = fix_json(content)
         result = json.loads(fixed)
@@ -199,103 +235,68 @@ def advanced_json_parse(content):
     except json.JSONDecodeError as e:
         print(f"❌ Method 3 failed: {e}")
     
-    # Method 4: Extract JSON with regex - IMPROVED
+    # Method 4: Parse line by line and reconstruct
     try:
-        # Look for array patterns - more flexible regex
-        json_pattern = r'\[(?:\s*\[.*?\]\s*,?\s*)*\]'
-        matches = re.findall(json_pattern, content, re.DOTALL)
-        if matches:
-            print(f"🔍 Found {len(matches)} potential JSON arrays")
-            for i, match in enumerate(matches):
+        print("🔧 Attempting line-by-line reconstruction...")
+        
+        lines = content.strip().split('\n')
+        segments = []
+        
+        for line in lines:
+            line = line.strip().rstrip(',')
+            if line and line.startswith('[[') and line.endswith(']]'):
                 try:
-                    result = json.loads(match)
-                    print(f"✅ Method 4: Regex extraction successful (match {i+1})")
-                    return result
+                    # Parse individual segment
+                    parsed_line = json.loads(line)
+                    segments.append(parsed_line)
                 except json.JSONDecodeError:
-                    continue
+                    # Manual parsing for this specific format
+                    # Extract time range and keywords using regex
+                    match = re.match(r'\[\[(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\], \[(.*)\]\]', line)
+                    if match:
+                        start_time = float(match.group(1))
+                        end_time = float(match.group(2))
+                        keywords_str = match.group(3)
+                        
+                        # Extract keywords
+                        keywords = []
+                        for keyword in re.findall(r'"([^"]*)"', keywords_str):
+                            keywords.append(keyword)
+                        
+                        if keywords:
+                            segments.append([[start_time, end_time], keywords])
+        
+        if segments:
+            print(f"✅ Method 4: Line-by-line reconstruction successful with {len(segments)} segments")
+            return segments
     except Exception as e:
         print(f"❌ Method 4 failed: {e}")
     
-    # Method 5: Manual reconstruction - ENHANCED
+    # Method 5: Regex-based extraction for your specific format
     try:
-        print("🔧 Attempting manual JSON reconstruction...")
+        print("🔧 Attempting regex-based extraction...")
         
-        # Look for time segments and keywords pattern with more flexible matching
-        # This regex is more permissive and handles various formatting
-        segment_pattern = r'\[\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\s*,\s*\[\s*([^\]]+)\s*\]\s*\]'
-        segments = re.findall(segment_pattern, content, re.DOTALL)
-        
-        print(f"🔍 Found {len(segments)} time segments using regex")
-        
-        if segments:
-            result = []
-            for i, (start_time, end_time, keywords_str) in enumerate(segments):
-                print(f"Processing segment {i+1}: [{start_time}, {end_time}] with keywords: {keywords_str[:50]}...")
-                
-                # Extract keywords with better handling
-                keywords = []
-                
-                # Try different quote patterns
-                quote_patterns = [
-                    r'"([^"]*)"',  # Double quotes
-                    r"'([^']*)'",  # Single quotes
-                    r'["\']([^"\']*)["\']'  # Mixed quotes
-                ]
-                
-                for pattern in quote_patterns:
-                    keywords = re.findall(pattern, keywords_str)
-                    if keywords:
-                        break
-                
-                # If no quotes found, try splitting by commas
-                if not keywords:
-                    keywords = [k.strip().strip('"\'') for k in keywords_str.split(',')]
-                    keywords = [k for k in keywords if k]  # Remove empty strings
-                
-                # Limit to 3 keywords and ensure they're not empty
-                keywords = [k.strip() for k in keywords if k.strip()][:3]
-                
-                if keywords:
-                    result.append([[float(start_time), float(end_time)], keywords])
-                    print(f"✅ Added segment: [{start_time}, {end_time}] with {len(keywords)} keywords")
-                else:
-                    print(f"⚠️ No valid keywords found for segment [{start_time}, {end_time}]")
-            
-            if result:
-                print(f"✅ Method 5: Manual reconstruction successful with {len(result)} segments")
-                return result
-    except Exception as e:
-        print(f"❌ Method 5 failed: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # Method 6: Try to extract just the array content and rebuild
-    try:
-        print("🔧 Attempting content extraction and rebuild...")
-        
-        # Find all [time, keywords] patterns
-        time_keyword_pattern = r'\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]\s*,\s*\[([^\]]+)\]'
-        matches = re.findall(time_keyword_pattern, content)
+        # Pattern specifically for your format: [[0.0-3.9], ["keyword1", "keyword2", "keyword3"]]
+        pattern = r'\[\[(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)\],\s*\[([^\]]+)\]\]'
+        matches = re.findall(pattern, content, re.MULTILINE)
         
         if matches:
-            result = []
-            for start_time, end_time, keywords_str in matches:
-                # Extract keywords
-                keywords = re.findall(r'["\']([^"\']+)["\']', keywords_str)
-                if not keywords:
-                    # Fallback: split by comma and clean
-                    keywords = [k.strip().strip('"\'') for k in keywords_str.split(',')]
-                    keywords = [k for k in keywords if k.strip()]
+            segments = []
+            for start_str, end_str, keywords_str in matches:
+                start_time = float(start_str)
+                end_time = float(end_str)
                 
-                keywords = keywords[:3]  # Limit to 3
+                # Extract keywords
+                keywords = re.findall(r'"([^"]*)"', keywords_str)
+                
                 if keywords:
-                    result.append([[float(start_time), float(end_time)], keywords])
+                    segments.append([[start_time, end_time], keywords])
             
-            if result:
-                print(f"✅ Method 6: Content extraction successful with {len(result)} segments")
-                return result
+            if segments:
+                print(f"✅ Method 5: Regex extraction successful with {len(segments)} segments")
+                return segments
     except Exception as e:
-        print(f"❌ Method 6 failed: {e}")
+        print(f"❌ Method 5 failed: {e}")
     
     print(f"❌ All JSON parsing methods failed. Content: {content}")
     return None
@@ -382,39 +383,12 @@ def getVideoSearchQueriesTimed(script, captions_timed):
             print(f"✅ Found {valid_segments}/{len(parsed_result)} valid segments")
             
             if valid_segments > 0:
-                # Validate time coverage (more lenient)
-                try:
-                    last_segment = parsed_result[-1]
-                    if isinstance(last_segment, list) and len(last_segment) >= 2:
-                        if isinstance(last_segment[0], list) and len(last_segment[0]) >= 2:
-                            actual_end = float(last_segment[0][1])
-                            time_diff = abs(actual_end - end_time)
-                            print(f"📊 Time coverage: Expected {end_time}, Got {actual_end}, Diff: {time_diff}")
-                            
-                            if time_diff <= 2.0:  # Allow 2 second tolerance
-                                print("✅ Time coverage validation passed")
-                                return parsed_result
-                            else:
-                                print(f"⚠️ Time coverage validation failed (diff: {time_diff}s)")
-                                # Still return the result if we have valid segments
-                                if valid_segments >= len(captions_timed) * 0.8:  # At least 80% coverage
-                                    print("✅ Accepting result due to sufficient segment coverage")
-                                    return parsed_result
-                except Exception as e:
-                    print(f"⚠️ Time validation error: {e}")
-                    # If we have valid segments, return them anyway
-                    if valid_segments > 0:
-                        print("✅ Returning result despite time validation error")
-                        return parsed_result
+                print("✅ Returning valid result")
+                return parsed_result
             
             if attempt < max_retries - 1:
                 print("🔄 Retrying due to validation issues...")
                 continue
-            else:
-                # Last attempt - return what we have if it's somewhat valid
-                if valid_segments > 0:
-                    print("⚠️ Returning partial result on final attempt")
-                    return parsed_result
             
         except Exception as e:
             print(f"❌ Error in getVideoSearchQueriesTimed (attempt {attempt + 1}): {e}")
@@ -453,8 +427,8 @@ Please generate video search queries for ALL {len(captions_timed)} segments."""
         
         response = client.chat.completions.create(
             model=model,
-            temperature=0.5,  # Reduced for more consistent output
-            max_tokens=3000,  # Increased token limit
+            temperature=0.3,  # Lower temperature for more consistent JSON output
+            max_tokens=4000,  # Increased token limit
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": user_content}
