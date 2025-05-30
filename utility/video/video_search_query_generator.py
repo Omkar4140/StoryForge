@@ -59,6 +59,50 @@ CRITICAL: Return ONLY the JSON array. No explanations, no markdown formatting, n
 
 Format: [[[t1, t2], ["topic-keyword1", "topic-keyword2", "topic-keyword3"]], [[t2, t3], ["topic-keyword4", "topic-keyword5", "topic-keyword6"]], ...]
 """
+
+def safe_unpack(data, expected_count, default_values=None):
+    """
+    Safely unpack data with fallback to defaults
+    
+    Args:
+        data: Data to unpack (tuple, list, etc.)
+        expected_count: Number of values expected
+        default_values: List of default values if unpacking fails
+    
+    Returns:
+        tuple: Unpacked values or defaults
+    """
+    try:
+        if isinstance(data, (tuple, list)):
+            if len(data) == expected_count:
+                return tuple(data)
+            elif len(data) > expected_count:
+                print(f"Warning: More values than expected ({len(data)} > {expected_count}), using first {expected_count}")
+                return tuple(data[:expected_count])
+            else:
+                print(f"Warning: Fewer values than expected ({len(data)} < {expected_count})")
+                if default_values and len(default_values) == expected_count:
+                    # Fill missing values with defaults
+                    result = list(data) + default_values[len(data):]
+                    return tuple(result[:expected_count])
+                else:
+                    # Pad with None values
+                    result = list(data) + [None] * (expected_count - len(data))
+                    return tuple(result)
+        else:
+            print(f"Data is not iterable: {type(data)}")
+            if default_values and len(default_values) == expected_count:
+                return tuple(default_values)
+            else:
+                return tuple([None] * expected_count)
+            
+    except Exception as e:
+        print(f"❌ Unpacking error: {e}")
+        if default_values and len(default_values) == expected_count:
+            return tuple(default_values)
+        else:
+            return tuple([None] * expected_count)
+
 def clean_json_response(response_text):
     """
     Removes extra text from API responses and extracts only the valid JSON portion.
@@ -275,7 +319,7 @@ Timed Captions: {captions_timed}"""
 
 def merge_empty_intervals(segments):
     """
-    Merge empty intervals with improved error handling
+    Merge empty intervals with improved error handling using safe_unpack
     """
     if segments is None:
         print("Warning: Received None for segments, returning empty list.")
@@ -298,34 +342,40 @@ def merge_empty_intervals(segments):
                 print(f"Warning: Segment at index {i} is not a list: {segments[i]}")
                 i += 1
                 continue
-                
-            # Handle different segment formats
-            segment = segments[i]
-            if len(segment) == 2:
-                interval, url = segment
-            elif len(segment) > 2:
-                # Take first two elements if more than 2
-                interval, url = segment[0], segment[1]
-                print(f"Warning: Segment {i} has more than 2 elements, using first 2")
-            else:
-                print(f"Warning: Segment {i} has less than 2 elements: {segment}")
-                i += 1
-                continue
+            
+            # Use safe_unpack to handle variable segment lengths
+            interval, url = safe_unpack(segments[i], 2, default_values=[[-1, -1], None])
             
             if url is None:
                 # Find consecutive None intervals
                 j = i + 1
-                while (j < len(segments) and 
-                       isinstance(segments[j], list) and 
-                       len(segments[j]) >= 2 and 
-                       segments[j][1] is None):
+                while j < len(segments):
+                    if not isinstance(segments[j], list) or len(segments[j]) < 2:
+                        break
+                    
+                    next_interval, next_url = safe_unpack(segments[j], 2, default_values=[[-1, -1], None])
+                    if next_url is not None:
+                        break
                     j += 1
                 
                 # Merge consecutive None intervals with the previous valid URL
                 if i > 0 and len(merged) > 0:
                     prev_interval, prev_url = merged[-1]
-                    if prev_url is not None and len(prev_interval) >= 2 and len(interval) >= 2 and prev_interval[1] == interval[0]:
-                        merged[-1] = [[prev_interval[0], segments[j-1][0][1]], prev_url]
+                    if (prev_url is not None and 
+                        len(prev_interval) >= 2 and 
+                        len(interval) >= 2 and 
+                        prev_interval[1] == interval[0]):
+                        
+                        # Get the last interval's end time
+                        last_end_time = interval[1]
+                        if j - 1 < len(segments):
+                            last_segment = segments[j-1]
+                            if isinstance(last_segment, list) and len(last_segment) >= 1:
+                                last_interval, _ = safe_unpack(last_segment, 2, default_values=[[-1, -1], None])
+                                if len(last_interval) >= 2:
+                                    last_end_time = last_interval[1]
+                        
+                        merged[-1] = [[prev_interval[0], last_end_time], prev_url]
                     else:
                         merged.append([interval, prev_url if len(merged) > 0 else None])
                 else:
@@ -336,11 +386,9 @@ def merge_empty_intervals(segments):
                 merged.append([interval, url])
                 i += 1
                 
-        except ValueError as e:
-            print(f"❌ Unpacking error at segment {i}: {e}")
+        except Exception as e:
+            print(f"❌ Error processing segment {i}: {e}")
             print(f"Segment data: {segments[i] if i < len(segments) else 'Index out of range'}")
             i += 1
-        except Exception as e:
-            print(f"❌ General error processing segment {i}: {e}")
-            i += 1
+    
     return merged
