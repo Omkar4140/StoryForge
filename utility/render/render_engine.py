@@ -3,6 +3,55 @@ import tempfile
 import requests
 from moviepy.editor import (AudioFileClip, CompositeVideoClip, TextClip, VideoFileClip)
 
+def safe_unpack(data, expected_count, default_values=None):
+    """
+    Safely unpack data with fallback to defaults - Enhanced version
+    
+    Args:
+        data: Data to unpack (tuple, list, etc.)
+        expected_count: Number of values expected
+        default_values: List of default values if unpacking fails
+    
+    Returns:
+        tuple: Unpacked values or defaults
+    """
+    try:
+        if data is None:
+            print("Warning: Data is None, using defaults")
+            if default_values and len(default_values) == expected_count:
+                return tuple(default_values)
+            else:
+                return tuple([None] * expected_count)
+        
+        if isinstance(data, (tuple, list)):
+            if len(data) == expected_count:
+                return tuple(data)
+            elif len(data) > expected_count:
+                print(f"Warning: More values than expected ({len(data)} > {expected_count}), using first {expected_count}")
+                return tuple(data[:expected_count])
+            else:
+                print(f"Warning: Fewer values than expected ({len(data)} < {expected_count})")
+                if default_values and len(default_values) == expected_count:
+                    # Fill missing values with defaults
+                    result = list(data) + default_values[len(data):]
+                    return tuple(result[:expected_count])
+                else:
+                    # Pad with None values
+                    result = list(data) + [None] * (expected_count - len(data))
+                    return tuple(result)
+        else:
+            print(f"Data is not iterable: {type(data)} - {data}")
+            if default_values and len(default_values) == expected_count:
+                return tuple(default_values)
+            else:
+                return tuple([None] * expected_count)
+            
+    except Exception as e:
+        print(f"❌ Unpacking error: {e}")
+        if default_values and len(default_values) == expected_count:
+            return tuple(default_values)
+        else:
+            return tuple([None] * expected_count)
 def normalize_data_format(data):
     """
     Normalize data to consistent format: ((start, end), content)
@@ -16,44 +65,63 @@ def normalize_data_format(data):
         if isinstance(data, (tuple, list)):
             if len(data) == 2:
                 # Check if first element is time info
-                first, second = data
+                first, second = data[0], data[1]
                 
                 # Format: ((start, end), content) - already correct
-                if isinstance(first, (tuple, list)) and len(first) == 2:
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
                     try:
                         # Verify times are numeric
                         float(first[0])
                         float(first[1])
                         return ((float(first[0]), float(first[1])), second)
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, IndexError):
                         pass
                 
                 # Format: ([start, end], content)
-                if isinstance(first, list) and len(first) == 2:
+                if isinstance(first, list) and len(first) >= 2:
                     try:
                         float(first[0])
                         float(first[1])
                         return ((float(first[0]), float(first[1])), second)
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, IndexError):
                         pass
                         
             elif len(data) == 3:
-                # Format: (start, end, content) OR ((start, end), content, extra)
+                # Could be: (start, end, content) OR ((start, end), content, extra)
+                first, second, third = data[0], data[1], data[2]
+                
+                # Check if first element is time tuple
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        # Format: ((start, end), content, extra) - ignore extra
+                        return ((float(first[0]), float(first[1])), second)
+                    except (ValueError, TypeError, IndexError):
+                        pass
+                
+                # Format: (start, end, content)
+                try:
+                    return ((float(first), float(second)), third)
+                except (ValueError, TypeError):
+                    pass
+                    
+            elif len(data) > 3:
+                # Handle cases with more than 3 elements
+                print(f"Warning: Data has {len(data)} elements, trying to extract time and content")
                 first = data[0]
-                if isinstance(first, (tuple, list)) and len(first) == 2:
-                    # Format: ((start, end), content, extra) - caption with color
+                if isinstance(first, (tuple, list)) and len(first) >= 2:
                     try:
                         float(first[0])
                         float(first[1])
                         return ((float(first[0]), float(first[1])), data[1])
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, IndexError):
                         pass
                 else:
-                    # Format: (start, end, content)
+                    # Try interpreting as (start, end, content, ...)
                     try:
-                        start, end, content = data
-                        return ((float(start), float(end)), content)
-                    except (ValueError, TypeError):
+                        return ((float(data[0]), float(data[1])), data[2])
+                    except (ValueError, TypeError, IndexError):
                         pass
         
         print(f"Warning: Could not normalize data format: {data}")
@@ -62,7 +130,6 @@ def normalize_data_format(data):
     except Exception as e:
         print(f"Error normalizing data: {e}")
         return None
-
 def download_file(url, filename):
     """Download file from URL"""
     headers = {
@@ -105,14 +172,19 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
             print(f"Raw video data: {video_data}")
             print(f"Data type: {type(video_data)}")
             
-            # Normalize the video data format
-            normalized = normalize_data_format(video_data)
-            if normalized is None:
-                print(f"❌ Could not normalize video data at index {i}")
-                continue
+            # Use safe_unpack instead of direct unpacking
+            time_info, video_url = safe_unpack(video_data, 2, [(-1, -1), None])
             
-            time_info, video_url = normalized
-            start_time, end_time = time_info
+            # If time_info is not a tuple, try to normalize
+            if not isinstance(time_info, (tuple, list)) or len(time_info) < 2:
+                # Try to normalize the entire video_data
+                normalized = normalize_data_format(video_data)
+                if normalized is None:
+                    print(f"❌ Could not normalize video data at index {i}")
+                    continue
+                time_info, video_url = normalized
+            
+            start_time, end_time = float(time_info[0]), float(time_info[1])
             duration = end_time - start_time
             
             print(f"Video {i+1}: {start_time:.1f}s - {end_time:.1f}s (duration: {duration:.1f}s)")
@@ -163,20 +235,17 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
             print(f"Raw caption data: {caption_data}")
             print(f"Data type: {type(caption_data)}")
             
-            # Initialize variables
+            # Handle different caption formats more robustly
             time_info = None
             text = ""
             color = "white"
             
-            # Handle different caption formats more carefully
             if isinstance(caption_data, (tuple, list)):
-                data_len = len(caption_data)
-                
-                if data_len >= 2:
-                    # Get the first element (should be time info)
+                if len(caption_data) >= 2:
+                    # Try to identify time info vs other data
                     potential_time_info = caption_data[0]
                     
-                    # Check if first element is time info
+                    # Check if first element looks like time info
                     if isinstance(potential_time_info, (tuple, list)) and len(potential_time_info) >= 2:
                         try:
                             # Verify it's actually time data
@@ -184,18 +253,30 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
                             float(potential_time_info[1])
                             time_info = potential_time_info
                             text = caption_data[1]
-                            if data_len >= 3:
+                            if len(caption_data) >= 3:
                                 color = caption_data[2]
                         except (ValueError, TypeError):
                             print(f"❌ Warning: First element not valid time info at index {i}")
                             continue
                     else:
-                        print(f"❌ Warning: Expected time info as first element at index {i}")
-                        continue
+                        # Maybe it's (start, end, text, color) format
+                        if len(caption_data) >= 3:
+                            try:
+                                start_time = float(caption_data[0])
+                                end_time = float(caption_data[1])
+                                time_info = (start_time, end_time)
+                                text = caption_data[2]
+                                if len(caption_data) >= 4:
+                                    color = caption_data[3]
+                            except (ValueError, TypeError):
+                                print(f"❌ Warning: Could not parse as (start, end, text) at index {i}")
+                                continue
+                        else:
+                            print(f"❌ Warning: Insufficient data at index {i}")
+                            continue
                 else:
                     print(f"❌ Warning: Caption data too short at index {i}: {caption_data}")
                     continue
-                    
             else:
                 print(f"❌ Warning: Caption data should be tuple/list at index {i}: {caption_data}")
                 continue
