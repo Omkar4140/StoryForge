@@ -227,7 +227,7 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                     timed_video_urls.append([[-1, -1], None])
                     continue
                 
-                time_segment, search_terms = search_data
+                time_segment, search_terms = safe_unpack(search_data, 2, default_values=[[-1, -1], []])
                 print(f"Time segment: {time_segment}")
                 print(f"Search terms: {search_terms}")
                 
