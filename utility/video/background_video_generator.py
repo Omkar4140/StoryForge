@@ -380,8 +380,8 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                         continue
                     
                     print(f"  🔍 Trying {orientation} query {j+1}/{len(search_terms)}: '{query}'")
-                    # Use getBestVideo function (assuming it exists)
-                    # url = getBestVideo(query, orientation_portrait=use_portrait, used_vids=used_links)
+                    # NOW ACTUALLY CALL getBestVideo - this was commented out before!
+                    url = getBestVideo(query, orientation_portrait=use_portrait, used_vids=used_links)
                     
                     if url:
                         used_links.append(url.split('.hd')[0] if '.hd' in url else url)
