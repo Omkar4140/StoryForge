@@ -138,3 +138,11 @@ def convert_to_wav(audio_filename):
     except Exception as e:
         print(f"❌ Error converting to WAV: {e}")
         return None
+def preview_captions(captions, max_preview=3):
+    """Preview first few captions"""
+    print("📋 Preview:")
+    for i, ((start, end), text, color) in enumerate(captions[:max_preview]):
+        print(f"   {i+1}. [{start:.1f}s - {end:.1f}s]: {text}")
+    
+    if len(captions) > max_preview:
+        print(f"   ... and {len(captions) - max_preview} more")
