@@ -176,19 +176,10 @@ def main():
         # Step 6: Render the final video
         print("🎬 Step 6: Rendering final video...")
         if background_video_urls:
-    # Pass orientation parameter to ensure portrait rendering
-            output_video = get_output_media(
-                audio_file=args.audio-file, 
-                timed_captions=timed_captions, 
-                background_video_data=background_video_urls, 
-                video_server=args.video-server,
-                orientation=args.orientation  # Add this line
-            )
+            output_video = get_output_media(args.audio_file, timed_captions, background_video_urls, args.video_server, args.orientation)
             if output_video:
                 print(f"🎉 SUCCESS! Your StoryForge video has been created: {output_video}")
-                print(f"📊 Video specs:")
-                print(f"   • Resolution: {'1080x1920 (9:16 Portrait)' if args.orientation == 'portrait' else '1920x1080 (16:9 Landscape)'}")
-                print(f"   • Optimized for: {'Mobile Fullscreen' if args.orientation == 'portrait' else 'Desktop/TV'}")
+                print(f"📊 Video includes:")
                 print(f"   • Story narration audio")
                 print(f"   • Synchronized captions")
                 print(f"   • Background video footage")
@@ -196,6 +187,7 @@ def main():
                 print("❌ Failed to render the final video.")
         else:
             print("⚠️  Creating audio-only version due to missing background videos.")
+            # Could implement audio-only video creation here
             print("💡 Tip: Check your PEXELS_KEY and internet connection for video footage.")
         
     except KeyboardInterrupt:
