@@ -24,7 +24,7 @@ CRITICAL REQUIREMENTS:
 1. ALL search terms must be directly related to the MAIN TOPIC/THEME
 2. Keywords should be visually concrete and searchable on stock video platforms
 3. Prioritize topic-relevant imagery over generic visuals
-4. Each keyword should be 1-4 words maximum
+4. Each keyword should be 1-3 words maximum
 5. Focus on what would actually appear in the video frame
 
 Topic Categories & Approach:
