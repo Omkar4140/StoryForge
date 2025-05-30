@@ -312,8 +312,6 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
                 txt=text_str,
                 fontsize=fontsize,
                 color=color,
-                stroke_width=3,
-                stroke_color='black',
                 method='caption',
                 size=(WIDTH - 100, None),
                 align='center'
