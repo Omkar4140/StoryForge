@@ -232,12 +232,12 @@ def generate_video_url(timed_video_searches, video_server, orientation="portrait
                 print(f"Search terms: {search_terms}")
                 
                 # Validate time segment
-                if not isinstance(time_segment, list) or len(time_segment) != 2:
+                if not isinstance(time_segment, list) or len(time_segment) < 2:
                     print(f"❌ Warning: Invalid time segment at index {i}: {time_segment}")
                     timed_video_urls.append([[-1, -1], None])
                     continue
                 
-                t1, t2 = time_segment
+                t1, t2 = safe_unpack(time_segment, 2, default_values=[-1, -1])
                 
                 # Ensure time values are numeric
                 try:
