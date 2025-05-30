@@ -1,7 +1,7 @@
-#🎬 StoryForge
+ #StoryForge 🎬
 StoryForge is a Python-based pipeline that transforms a simple topic into a fully-rendered, narrated short video — complete with background visuals, synchronized captions, and voiceover narration. It is built to run seamlessly on Google Colab using Python 3.11 and leverages the power of modern AI services and media tools.
 
-#🚀 Features
+ #Features 🚀
 ✍️ Script Generation using Groq API
 
 🎤 Narration using edge-tts voices
@@ -16,7 +16,7 @@ StoryForge is a Python-based pipeline that transforms a simple topic into a full
 
 🔄 Auto-orchestration of the full pipeline via app.py
 
-#🧠 Workflow Overview
+ #Workflow Overview 🧠
 Input Topic → e.g., "AI in Education"
 
 Script Generation → Uses Groq LLM to create a 35-50 sec story
