@@ -1,7 +1,58 @@
+# Fixed utility/render/render_engine.py
+
 import os
 import tempfile
 import requests
 from moviepy.editor import (AudioFileClip, CompositeVideoClip, TextClip, VideoFileClip)
+
+def normalize_data_format(data):
+    """
+    Normalize data to consistent format: ((start, end), content)
+    Handles various input formats and returns consistent output
+    """
+    try:
+        if not data:
+            return None
+            
+        # Handle different possible formats
+        if isinstance(data, (tuple, list)):
+            if len(data) == 2:
+                # Check if first element is time info
+                first, second = data
+                
+                # Format: ((start, end), content) - already correct
+                if isinstance(first, (tuple, list)) and len(first) == 2:
+                    try:
+                        # Verify times are numeric
+                        float(first[0])
+                        float(first[1])
+                        return ((float(first[0]), float(first[1])), second)
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Format: ([start, end], content)
+                if isinstance(first, list) and len(first) == 2:
+                    try:
+                        float(first[0])
+                        float(first[1])
+                        return ((float(first[0]), float(first[1])), second)
+                    except (ValueError, TypeError):
+                        pass
+                        
+            elif len(data) == 3:
+                # Format: (start, end, content)
+                try:
+                    start, end, content = data
+                    return ((float(start), float(end)), content)
+                except (ValueError, TypeError):
+                    pass
+        
+        print(f"Warning: Could not normalize data format: {data}")
+        return None
+        
+    except Exception as e:
+        print(f"Error normalizing data: {e}")
+        return None
 
 def download_file(url, filename):
     """Download file from URL"""
@@ -14,12 +65,12 @@ def download_file(url, filename):
 
 def get_output_media(audio_file_path, timed_captions, background_video_data, orientation="portrait"):
     """
-    Generate video with captions and background videos
+    Generate video with captions and background videos - Enhanced with better data handling
     
     Args:
         audio_file_path: Path to audio file
-        timed_captions: List of ((start, end), text, color) tuples
-        background_video_data: List of ((start, end), video_url) tuples
+        timed_captions: List of caption data in various formats
+        background_video_data: List of video data in various formats
         orientation: "portrait" or "landscape"
     """
     OUTPUT_FILE_NAME = "rendered_video.mp4"
@@ -37,15 +88,30 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
     visual_clips = []
     temp_files = []
     
-    # Process background videos
+    # Process background videos with enhanced error handling
     print(f"📹 Processing {len(background_video_data)} video segments...")
     for i, video_data in enumerate(background_video_data):
         try:
-            # Simple unpacking - expect ((start, end), url) format
-            (start_time, end_time), video_url = video_data
+            print(f"\n--- Processing video {i+1} ---")
+            print(f"Raw video data: {video_data}")
+            print(f"Data type: {type(video_data)}")
+            
+            # Normalize the video data format
+            normalized = normalize_data_format(video_data)
+            if normalized is None:
+                print(f"❌ Could not normalize video data at index {i}")
+                continue
+            
+            time_info, video_url = normalized
+            start_time, end_time = time_info
             duration = end_time - start_time
             
-            print(f"Video {i+1}: {start_time:.1f}s - {end_time:.1f}s")
+            print(f"Video {i+1}: {start_time:.1f}s - {end_time:.1f}s (duration: {duration:.1f}s)")
+            print(f"Video URL: {video_url}")
+            
+            if video_url is None:
+                print(f"⚠️ Skipping video {i+1}: No URL provided")
+                continue
             
             # Download video
             video_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
@@ -72,25 +138,64 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
                 video_clip = video_clip.loop(duration=duration)
             
             visual_clips.append(video_clip)
-            print(f"✅ Video {i+1} processed")
+            print(f"✅ Video {i+1} processed successfully")
             
         except Exception as e:
             print(f"❌ Error processing video {i+1}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
-    # Process captions
-    print(f"📝 Processing {len(timed_captions)} captions...")
+    # Process captions with enhanced error handling
+    print(f"\n📝 Processing {len(timed_captions)} captions...")
     for i, caption_data in enumerate(timed_captions):
         try:
-            # Simple unpacking - expect ((start, end), text, color) format
-            (start_time, end_time), text, color = caption_data
-            duration = end_time - start_time
+            print(f"\n--- Processing caption {i+1} ---")
+            print(f"Raw caption data: {caption_data}")
+            print(f"Data type: {type(caption_data)}")
             
-            print(f"Caption {i+1}: {start_time:.1f}s - {end_time:.1f}s: '{str(text)[:30]}...'")
+            # Handle different caption formats
+            if isinstance(caption_data, (tuple, list)):
+                if len(caption_data) >= 3:
+                    # Format: ((start, end), text, color) or ([start, end], text, color)
+                    time_info, text, color = caption_data[0], caption_data[1], caption_data[2]
+                elif len(caption_data) == 2:
+                    # Format: ((start, end), text) or ([start, end], text)
+                    time_info, text = caption_data
+                    color = "white"  # default color
+                else:
+                    print(f"❌ Warning: Invalid caption format at index {i}: {caption_data}")
+                    continue
+                    
+                # Normalize time info
+                if isinstance(time_info, (tuple, list)) and len(time_info) >= 2:
+                    try:
+                        start_time = float(time_info[0])
+                        end_time = float(time_info[1])
+                    except (ValueError, TypeError):
+                        print(f"❌ Warning: Invalid time values at index {i}: {time_info}")
+                        continue
+                else:
+                    print(f"❌ Warning: Invalid time info at index {i}: {time_info}")
+                    continue
+                    
+            else:
+                print(f"❌ Warning: Caption data should be tuple/list at index {i}: {caption_data}")
+                continue
+            
+            duration = end_time - start_time
+            text_str = str(text).strip()
+            
+            if not text_str:
+                print(f"⚠️ Skipping empty caption at index {i}")
+                continue
+            
+            print(f"Caption {i+1}: {start_time:.1f}s - {end_time:.1f}s: '{text_str[:30]}...'")
+            print(f"Color: {color}, Duration: {duration:.1f}s")
             
             # Create text clip
             text_clip = TextClip(
-                txt=str(text),
+                txt=text_str,
                 fontsize=fontsize,
                 color=color,
                 stroke_width=3,
@@ -104,14 +209,18 @@ def get_output_media(audio_file_path, timed_captions, background_video_data, ori
             text_clip = text_clip.set_position(('center', 'bottom'))
             
             visual_clips.append(text_clip)
-            print(f"✅ Caption {i+1} processed")
+            print(f"✅ Caption {i+1} processed successfully")
             
         except Exception as e:
             print(f"❌ Error processing caption {i+1}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     if not visual_clips:
-        print("❌ No clips created!")
+        print("❌ No clips created! Check your input data.")
+        print(f"Captions sample: {timed_captions[:2] if timed_captions else 'None'}")
+        print(f"Videos sample: {background_video_data[:2] if background_video_data else 'None'}")
         return None
     
     # Load audio
